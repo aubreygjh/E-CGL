@@ -24,6 +24,8 @@ def assign_hyp_param(args, params):
         args.joint_args = params
     if args.method == 'ergnn':
         args.ergnn_args = params
+    if args.method == 'my':
+        args.my_args = params
 
 
 def str2dict(s):

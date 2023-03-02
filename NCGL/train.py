@@ -19,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight-decay', type=float, default=5e-4, help="weight decay")
     parser.add_argument('--backbone', type=str, default='GCN', help="backbone GNN, [GAT, GCN, GIN]")
     parser.add_argument('--method', type=str,
-                        choices=["bare", 'lwf', 'gem', 'ewc', 'mas', 'twp', 'jointtrain', 'ergnn', 'joint','Joint'], default="gem",
+                        choices=["bare", 'lwf', 'gem', 'ewc', 'mas', 'twp', 'jointtrain', 'ergnn', 'joint','Joint', 'my'], default="gem",
                         help="baseline continual learning method")
     # parameters for continual learning settings
     parser.add_argument('--share-labels', type=strtobool, default=False,
@@ -44,6 +44,7 @@ if __name__ == '__main__':
                                  'attn_drop': .6, 'negative_slope': 0.2, 'residual': False})
     parser.add_argument('--GCN-args', default={'h_dims': [256], 'dropout': 0.0, 'batch_norm': False})
     parser.add_argument('--GIN-args', default={'h_dims': [256], 'dropout': 0.0})
+    parser.add_argument('--my_args', type=str2dict, default={'budget': [100,1000], 'weight': [0.9, 0.99]})
     parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000], 'd': [0.5], 'sampler': ['CM']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--lwf_args', type=str2dict, default={'lambda_dist': [1.0, 10.0], 'T': [2.0, 20.0]})
@@ -56,25 +57,26 @@ if __name__ == '__main__':
     parser.add_argument('--cls-balance', type=strtobool, default=True, help='whether to balance the cls when training and testing')
     parser.add_argument('--repeats', type=int, default=1, help='how many times to repeat the experiments for the mean and std')
     parser.add_argument('--ILmode', default='taskIL',choices=['taskIL','classIL'])
-    parser.add_argument('--batch_size', type=int, default=2000)
+    parser.add_argument('--batch_size', type=int, default=4000)
     parser.add_argument('--minibatch', type=strtobool, default=True, help='whether to use the mini-batch training')
     parser.add_argument('--batch_shuffle', type=strtobool, default=True, help='whether to shuffle the data when constructing the dataloader')
     parser.add_argument('--sample_nbs', type=strtobool, default=True, help='whether to sample neighbors instead of using all')
     parser.add_argument('--n_nbs_sample', type=lambda x: [int(i) for i in x.replace(' ', '').split(',')], default=[10, 25], help='number of neighbors to sample per hop, use comma to separate the numbers when using the command line, e.g. 10,25 or 10, 25')
     parser.add_argument('--nb_sampler', default=None)
     parser.add_argument('--replace_illegal_char', type=strtobool, default=False)
-    parser.add_argument('--ori_data_path', type=str, default='/store/data', help='the root path to raw data')
-    parser.add_argument('--data_path', type=str, default='./data', help='the path to processed data (splitted into tasks)')
+    parser.add_argument('--ori_data_path', type=str, default='./data/raw', help='the root path to raw data')
+    parser.add_argument('--data_path', type=str, default='./data/processed', help='the path to processed data (splitted into tasks)')
     parser.add_argument('--result_path', type=str, default='./results', help='the path for saving results')
-    parser.add_argument('--overwrite_result', type=strtobool, default=False, help='whether to overwrite existing results')
+    parser.add_argument('--overwrite_result', type=strtobool, default=True, help='whether to overwrite existing results')
     parser.add_argument('--load_check', type=strtobool, default=False, help='whether to check the existence of processed data by loading')
-    parser.add_argument('--perform_testing', type=strtobool, default=True, help='whether to check the existence of processed data by loading')
+    parser.add_argument('--perform_testing', type=strtobool, default=False, help='')
     args = parser.parse_args()
     args.ratio_valid_test = [float(i) for i in args.ratio_valid_test]
     set_seed(args)
 
     method_args = {'ergnn': args.ergnn_args, 'lwf': args.lwf_args, 'twp': args.twp_args, 'ewc': args.ewc_args,
-                   'bare': args.bare_args, 'gem': args.gem_args, 'mas': args.mas_args, 'joint': args.joint_args}
+                   'bare': args.bare_args, 'gem': args.gem_args, 'mas': args.mas_args, 'joint': args.joint_args,
+                   'my': args.my_args}
     backbone_args = {'GCN': args.GCN_args, 'GAT': args.GAT_args, 'GIN': args.GIN_args}
     hyp_param_list = compose_hyper_params(method_args[args.method])
     AP_best, name_best = 0, None
@@ -149,13 +151,15 @@ if __name__ == '__main__':
                 AP_best = np.mean(AP_dict[hyp_params_str])
                 hyp_best_str = hyp_params_str
                 name_best = name
-            print(f'best params is {hyp_best_str}, best AP is {AP_best}')
+            print(f'best params is {hyp_best_str}, best AP is {AP_best}\n')
             with open(f'{args.result_path}/{name}.pkl', 'wb') as f:
                 pickle.dump(acc_matrices, f)
 
     # save the models
     config_name = name_best.split('/')[-1]
     subfolder_c = name_best.split(config_name)[-2]
+    # after searched the best set of hyperparams, use such setting to test
+    # should set false if we dont use grid search
     if args.perform_testing:
         print('----------Now in testing--------')
         acc_matrices = []

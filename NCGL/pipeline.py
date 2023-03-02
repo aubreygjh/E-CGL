@@ -136,7 +136,7 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         task_manager.add_task(task, n_cls_so_far)
 
         for epoch in range(epochs):
-            if args.method == 'lwf':
+            if args.method in ['lwf', 'my']:
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
                                                ids_per_cls, dataset)
             else:
@@ -175,7 +175,8 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
             with open(save_model_path, 'wb') as f:
                 pickle.dump(model, f)  # save the best model for each hyperparameter composition
-        prev_model = copy.deepcopy(model).cuda(args.gpu)
+        # prev_model = copy.deepcopy(model).cuda(args.gpu)
+        prev_model = copy.deepcopy(life_model_ins).cuda(args.gpu)
 
     print('AP: ', acc_mean)
     backward = []
@@ -849,7 +850,7 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
                                                     drop_last=False)
 
         for epoch in range(epochs):
-            if args.method == 'lwf':
+            if args.method in ['lwf', 'my']:
                 life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, prev_model, train_ids, ids_per_cls,
                                        dataset)
             else:
@@ -885,7 +886,7 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
             with open(save_model_path, 'wb') as f:
                 pickle.dump(model, f)
-        prev_model = copy.deepcopy(model).cuda()
+        prev_model = copy.deepcopy(life_model_ins).cuda()
 
     print('AP: ', acc_mean)
     backward = []

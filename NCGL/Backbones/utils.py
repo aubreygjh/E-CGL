@@ -183,10 +183,10 @@ class NodeLevelDataset(incremental_graph_trans_):
             data = DglNodePropPredDataset(name, root=f'{args.ori_data_path}/ogb_downloaded')
             graph, label = data[0]
         elif name in ['CoraFullDataset', 'CoraFull','corafull', 'CoraFull-CL','Corafull-CL']:
-            data = CoraFullDataset()
+            data = CoraFullDataset(f'{args.ori_data_path}/corafull')
             graph, label = data[0], data[0].dstdata['label'].view(-1, 1)
         elif name in ['reddit','Reddit','Reddit-CL']:
-            data = RedditDataset(self_loop=False)
+            data = RedditDataset(raw_dir=f'{args.ori_data_path}/reddit', self_loop=False)
             graph, label = data.graph, data.labels.view(-1, 1)
         elif name == 'Arxiv-CL':
             data = DglNodePropPredDataset('ogbn-arxiv', root=f'{args.ori_data_path}/ogb_downloaded')
