@@ -96,28 +96,9 @@ class NET(torch.nn.Module):
                 """
 
         ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
-        n_nodes = len(train_ids)
-        buffer_size = len(self.buffer_node_ids)
-        beta = buffer_size/(buffer_size+n_nodes)
-
-        self.net.train()    
-        self.net.zero_grad()
         offset1, offset2 = self.task_manager.get_label_offset(t) # Since the output dimensions of a model may correspond to multiple tasks, offset1 and offset2 denote the starting end ending dimension of the output for task t.
-        output, _ = self.net(g, features) # get the model output
-        output_labels = labels[train_ids]
+        self.net.train()    
 
-        # choose whether to balance the loss with the class sizes
-        if args.cls_balance:
-            n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
-            loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
-        else:
-            loss_w_ = [1. for i in range(args.n_cls)]
-        loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
-        # Whether the total number of dimensions are pre-defined or increase with the incoming of new tasks
-        if args.classifier_increase:
-            loss = self.ce(output[train_ids, offset1:offset2], output_labels, weight=loss_w_[offset1: offset2])
-        else:
-            loss = self.ce(output[train_ids], output_labels, weight=loss_w_)
 
         # if the given task is a new task, set self.current_task to denote the current task index. This is mainly designed for the mini-batch training scenario, in which the data of a task may not come in simultaneously, and each batch of data may either belong to an existing task or a new task..
         if t != self.current_task:            
@@ -128,8 +109,8 @@ class NET(torch.nn.Module):
             if t > 0:
                 # nodes_to_retrive = list(set(self.buffer_node_ids).intersection(set(old_ids.tolist())))
                 nodes_to_retrive = self.buffer_node_ids
-                g, _, _ = dataset.get_graph(node_ids=nodes_to_retrive)
-                self.aux_g = g.to(device=f'cuda:{features.get_device()}')
+                aux_g, _, _ = dataset.get_graph(node_ids=nodes_to_retrive)
+                self.aux_g = aux_g.to(device=f'cuda:{features.get_device()}')
                 self.aux_features, self.aux_labels = self.aux_g.srcdata['feat'], self.aux_g.dstdata['label'].squeeze()
                 if args.cls_balance:
                     n_per_cls = [(self.aux_labels == j).sum() for j in range(args.n_cls)]
@@ -138,11 +119,32 @@ class NET(torch.nn.Module):
                     loss_w_ = [1. for i in range(args.n_cls)]
                 self.aux_loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
 
+
+        n_nodes = len(train_ids)
+        buffer_size = len(self.buffer_node_ids)
+        beta = buffer_size/(buffer_size+n_nodes)
+        self.net.zero_grad()
+        output_labels = labels[train_ids]
+        output, _ = self.net(g, features) # get the model output
+        # choose whether to balance the loss with the class sizes
+        if args.cls_balance:
+            n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
+            loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
+        else:
+            loss_w_ = [1. for i in range(args.n_cls)]
+        loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
+        # Whether the total number of dimensions are pre-defined or increase with the incoming of new tasks
+        if args.classifier_increase:
+            loss = self.ce(output[train_ids, offset1:offset2], output_labels, weight=loss_w_[offset1: offset2])  #this is where task-IL and class-IL differs
+        else:
+            loss = self.ce(output[train_ids], output_labels, weight=loss_w_)
+
+
         if t!=0:
             # calculate auxiliary loss based on replay if not the first task
             output, _ = self.net(self.aux_g, self.aux_features)
             if args.classifier_increase:
-                loss_aux = self.ce(output[:, offset1:offset2], self.aux_labels, weight=self.aux_loss_w_[offset1: offset2])
+                loss_aux = self.ce(output[:, offset1:offset2], self.aux_labels, weight=self.aux_loss_w_[offset1: offset2]) #this is where task-IL and class-IL differs
             else:
                 loss_aux = self.ce(output, self.aux_labels, weight=self.aux_loss_w_)
             loss = beta*loss + (1-beta)*loss_aux
@@ -151,37 +153,16 @@ class NET(torch.nn.Module):
         self.opt.step()
 
 
-    def observe_task_IL(self, args, g, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
 
-        # self.epochs += 1
-        # last_epoch = self.epochs % args.epochs
+    def observe_task_IL(self, args, g, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
 
         ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
         if not isinstance(self.aux_g, list):
             self.aux_g = []
             self.buffer_node_ids = {}
             self.aux_loss_w_ = []
-        n_nodes = len(train_ids)
-        buffer_size = 0
-        for k in self.buffer_node_ids:
-            buffer_size+=len(self.buffer_node_ids[k])
-        beta = buffer_size/(buffer_size+n_nodes)
-        
-        self.net.train()    
-        
-
-        # ###Learning the new incoming data
-        self.net.zero_grad()
-        offset1, offset2 = self.task_manager.get_label_offset(t-1)[1], self.task_manager.get_label_offset(t)[1] 
-        output, _ = self.net(g, features) # get the model outputs
-        output_labels = labels[train_ids] # get the labels
-        if args.cls_balance: # choose whether to balance the loss with the class sizes
-            n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
-            loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
-        else:
-            loss_w_ = [1. for i in range(args.n_cls)]
-        loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
-        loss = self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
+        offset1, offset2 = self.task_manager.get_label_offset(t-1)[1], self.task_manager.get_label_offset(t)[1]  #this is where task-IL and class-IL differs
+        self.net.train()
  
 
         # if the given task is a new task, set self.current_task to denote the current task index. 
@@ -218,6 +199,25 @@ class NET(torch.nn.Module):
                 loss_w_ = [1. for i in range(args.n_cls)]
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             self.aux_loss_w_.append(loss_w_)
+
+
+        n_nodes = len(train_ids)
+        buffer_size = 0
+        for k in self.buffer_node_ids:
+            buffer_size+=len(self.buffer_node_ids[k])
+        beta = buffer_size/(buffer_size+n_nodes)
+        # ###Learning the new incoming data
+        self.net.zero_grad()
+        output_labels = labels[train_ids] # get the labels
+        output, _ = self.net(g, features) # get the model outputs
+        if args.cls_balance: # choose whether to balance the loss with the class sizes
+            n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
+            loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
+        else:
+            loss_w_ = [1. for i in range(args.n_cls)]
+        loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
+        loss = self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
+
 
         if t != 0: # calculate auxiliary loss based on replay if not the first task
             for oldt in range(t):
@@ -261,6 +261,7 @@ class NET(torch.nn.Module):
         # now compute the grad on the current task
         offset1, offset2 = self.task_manager.get_label_offset(t-1)[1], self.task_manager.get_label_offset(t)[1]
     
+
         # sample and store ids from current task
         # this block is for batch training, only execute once in the iteration of a dataloader
         if t != self.current_task:
@@ -268,7 +269,7 @@ class NET(torch.nn.Module):
             sampled_ids = self.sampler(g, ids_per_cls_train, train_ids, self.budget)
             old_ids = g.ndata['_ID'].cpu()
             self.buffer_node_ids[t] = old_ids[sampled_ids].tolist()
-            nodes_to_retrive = self.buffer_node_ids[t]
+            nodes_to_retrive = self.buffer_node_ids[t] #should have other versions
             aux_g, __, _ = dataset.get_graph(node_ids=nodes_to_retrive)
             self.aux_g.append(aux_g.to(device='cuda:{}'.format(args.gpu)))
             if args.cls_balance:
@@ -279,7 +280,6 @@ class NET(torch.nn.Module):
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             self.aux_loss_w_.append(loss_w_)
 
-        
 
         for input_nodes, output_nodes, blocks in dataloader:
             n_nodes_current_batch = output_nodes.shape[0]
