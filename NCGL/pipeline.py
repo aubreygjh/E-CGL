@@ -1,6 +1,7 @@
 import os
 import pickle
 import numpy as np
+import time
 import torch
 from Backbones.model_factory import get_model
 from Backbones.utils import evaluate, NodeLevelDataset, evaluate_batch
@@ -119,8 +120,14 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
     acc_matrix = np.zeros([args.n_tasks, args.n_tasks])
     meanas = []
     prev_model = None
+    prev_subgraph = None
+    prev_features = None
+    # prev_labels = None
+    prev_train_ids = None
+    # prev_ids_per_cls = None
     data_prepare(args)
     n_cls_so_far = 0
+    time_usage = []
     for task, task_cls in enumerate(args.task_seq):
         name, ite = args.current_model_save_path
         config_name = name.split('/')[-1]
@@ -134,13 +141,28 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
         task_manager.add_task(task, n_cls_so_far)
-
+        # train
+        start_time = time.time()
         for epoch in range(epochs):
-            if args.method in ['lwf', 'my']:
+            if args.method in ['my']:
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
                                                ids_per_cls, dataset)
+            elif args.method == 'lwf':
+                life_model_ins.observe_task_IL(args, subgraph, features, labels, task, train_ids, ids_per_cls,
+                                            prev_model, prev_subgraph, prev_features, prev_train_ids,
+                                            dataset)
             else:
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, train_ids, ids_per_cls, dataset)
+        time_usage.append(time.time()-start_time)
+
+        # prev_model = copy.deepcopy(life_model_ins).cuda(args.gpu)
+        prev_subgraph = copy.deepcopy(subgraph).to(device='cuda:{}'.format(args.gpu))
+        prev_features = copy.deepcopy(features).cuda(args.gpu)
+        # prev_labels = copy.deepcopy(labels).cuda(args.gpu)
+        prev_train_ids = copy.deepcopy(train_ids)
+        # prev_ids_per_cls = copy.deepcopy(ids_per_cls).cuda(args.gpu)
+
+        # test
         if not valid:
             model = pickle.load(open(save_model_path,'rb')).cuda(args.gpu)
         acc_mean = []
@@ -169,7 +191,9 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
-        print(f"acc_mean: {acc_mean}", end="")
+        time_mean = round(np.mean(time_usage), 2)
+        print(f"acc_mean: {acc_mean}|", end="")
+        print(f"time_mean: {time_mean}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -185,7 +209,7 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         backward.append(round(b, 2))
     mean_backward = round(np.mean(backward), 2)
     print('AF: ', mean_backward)
-    print('\n')
+
     return acc_mean, mean_backward, acc_matrix
 
 def pipeline_task_IL_inter_edge(args, valid=False):
@@ -831,6 +855,7 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
     prev_model = None
     n_cls_so_far = 0
     data_prepare(args)
+    time_usage = []
     for task, task_cls in enumerate(args.task_seq):
         name, ite = args.current_model_save_path
         config_name = name.split('/')[-1]
@@ -849,6 +874,7 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
                                                     batch_size=args.batch_size, shuffle=args.batch_shuffle,
                                                     drop_last=False)
 
+        start_time = time.time()
         for epoch in range(epochs):
             if args.method in ['lwf', 'my']:
                 life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, prev_model, train_ids, ids_per_cls,
@@ -856,7 +882,8 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
             else:
                 life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, train_ids, ids_per_cls, dataset)
                 torch.cuda.empty_cache()  # tracemalloc.stop()
-
+        end_time = time.time()
+        time_usage.append(end_time-start_time)
 
         # test
         if not valid:
@@ -880,7 +907,9 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
-        print(f"acc_mean: {acc_mean}", end="")
+        time_mean = round(np.mean(time_usage), 2)
+        print(f"acc_mean: {acc_mean}|", end="")
+        print(f"time_mean: {time_mean}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -897,7 +926,7 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
     mean_backward = round(np.mean(backward), 2)
     print('AF: ', mean_backward)
 
-    print('\n')
+    # print('\n')
     return acc_mean, mean_backward, acc_matrix
 
 def pipeline_task_IL_no_inter_edge_minibatch_joint(args, valid=False):
