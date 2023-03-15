@@ -122,7 +122,7 @@ class NET(torch.nn.Module):
         loss.backward()
         self.opt.step()
 
-    def observe_task_IL(self, args, g, features, labels, t, train_ids, ids_per_cls, prev_model, prev_subgraph, prev_features, prev_train_ids, dataset):
+    def observe_task_IL(self, args, g, features, labels, t, prev_model, train_ids, ids_per_cls,  dataset):
         """
                         The method for learning the given tasks under the task-IL setting.
 
@@ -158,33 +158,33 @@ class NET(torch.nn.Module):
         loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
         loss = self.ce(logits[train_ids, offset1:offset2], output_labels- offset1, weight=loss_w_[offset1: offset2])
 
-        # if t > 0:
-        #     # print('here',prev_model)
-        #     target = prev_model(g, features)
-        #     if isinstance(target, tuple):
-        #         target = target[0]
-        #     for oldt in range(t):
-        #         o1, o2 = self.task_manager.get_label_offset(oldt-1)[1], self.task_manager.get_label_offset(oldt)[1]
-        #         logits_dist = logits[train_ids,o1:o2]
-        #         dist_target = target[train_ids,o1:o2]
-        #         dist_loss = MultiClassCrossEntropy(logits_dist, dist_target, args.lwf_args['T'])
-        #         loss = loss + args.lwf_args['lambda_dist'] * dist_loss
-        
         if t > 0:
-            target = prev_model(prev_subgraph, prev_features)
-            logits = self.net(prev_subgraph, prev_features)
+            # print('here',prev_model)
+            target = prev_model(g, features)
             if isinstance(target, tuple):
                 target = target[0]
-            if isinstance(logits, tuple):
-                logits = logits[0]
             for oldt in range(t):
-                o1, o2 = self.task_manager.get_label_offset(oldt - 1)[1],self.task_manager.get_label_offset(oldt)[1]
-                logits_dist = logits[prev_train_ids,o1:o2]
-                dist_target = target[prev_train_ids,o1:o2]
-                # logits_dist = logits[prev_train_ids,:]
-                # dist_target = target[prev_train_ids,:]
+                o1, o2 = self.task_manager.get_label_offset(oldt-1)[1], self.task_manager.get_label_offset(oldt)[1]
+                logits_dist = logits[train_ids,o1:o2]
+                dist_target = target[train_ids,o1:o2]
                 dist_loss = MultiClassCrossEntropy(logits_dist, dist_target, args.lwf_args['T'])
-                loss = loss + args.lwf_args['lambda_dist']*dist_loss
+                loss = loss + args.lwf_args['lambda_dist'] * dist_loss
+        
+        # if t > 0:
+        #     target = prev_model(prev_subgraph, prev_features)
+        #     logits = self.net(prev_subgraph, prev_features)
+        #     if isinstance(target, tuple):
+        #         target = target[0]
+        #     if isinstance(logits, tuple):
+        #         logits = logits[0]
+        #     for oldt in range(t):
+        #         o1, o2 = self.task_manager.get_label_offset(oldt - 1)[1],self.task_manager.get_label_offset(oldt)[1]
+        #         logits_dist = logits[prev_train_ids,o1:o2]
+        #         dist_target = target[prev_train_ids,o1:o2]
+        #         # logits_dist = logits[prev_train_ids,:]
+        #         # dist_target = target[prev_train_ids,:]
+        #         dist_loss = MultiClassCrossEntropy(logits_dist, dist_target, args.lwf_args['T'])
+        #         loss = loss + args.lwf_args['lambda_dist']*dist_loss
       
         loss.backward()
         self.opt.step()
@@ -234,7 +234,7 @@ class NET(torch.nn.Module):
 
             # knowledge distillation
             if t > 0:
-                target = prev_model.forward_batch(blocks, input_features)
+                target = prev_model.net.forward_batch(blocks, input_features)
                 if isinstance(target, tuple):
                     target = target[0]
                 for oldt in range(t):

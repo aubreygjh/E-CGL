@@ -120,9 +120,6 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
     acc_matrix = np.zeros([args.n_tasks, args.n_tasks])
     meanas = []
     prev_model = None
-    prev_subgraph = None
-    prev_features = None
-    prev_train_ids = None
     data_prepare(args)
     n_cls_so_far = 0
     train_time = []
@@ -147,17 +144,12 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
                                                ids_per_cls, dataset, epoch)
             elif args.method == 'lwf':
-                life_model_ins.observe_task_IL(args, subgraph, features, labels, task, train_ids, ids_per_cls,
-                                            prev_model, prev_subgraph, prev_features, prev_train_ids,
-                                            dataset)
+                life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
+                                               ids_per_cls, dataset)
             else:
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, train_ids, ids_per_cls, dataset)
         end_time = time.time()
         train_time.append(end_time-start_time)
-
-        # prev_subgraph = copy.deepcopy(subgraph).to(device='cuda:{}'.format(args.gpu))
-        # prev_features = copy.deepcopy(features).cuda(args.gpu)
-        # prev_train_ids = copy.deepcopy(train_ids)
 
         # test
         if not valid:
@@ -190,8 +182,8 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         # time_mean = round(np.mean(train_time), 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(train_time[-1], 2)}s, ", end="")
-        print(f"infer_time:{round(infer_time[-1], 2)}s", end="")
+        print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        # print(f"infer_time:{round(infer_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -905,8 +897,8 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         # time_mean = round(np.mean(train_time), 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(train_time[-1], 2)}s, ", end="")
-        print(f"infer_time:{round(infer_time[-1], 2)}s", end="")
+        print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        # print(f"infer_time:{round(infer_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')

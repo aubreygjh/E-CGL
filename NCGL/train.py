@@ -38,14 +38,14 @@ if __name__ == '__main__':
     parser.add_argument('--default_split', type=strtobool, default=False, help='whether to  use the data split provided by the dataset')
     parser.add_argument('--task_seq', default=[])
     parser.add_argument('--n-task', default=0, help='will be assigned during running')
-    parser.add_argument('--n_cls_per_task', default=2, help='how many classes does each task  contain')
+    parser.add_argument('--n_cls_per_task', type=int, default=2, help='how many classes does each task  contain')
     parser.add_argument('--GAT-args',
                         default={'num_layers': 1, 'num_hidden': 32, 'heads': 8, 'out_heads': 1, 'feat_drop': .6,
                                  'attn_drop': .6, 'negative_slope': 0.2, 'residual': False})
     parser.add_argument('--GCN-args', default={'h_dims': [256], 'dropout': 0.0, 'batch_norm': False})
     parser.add_argument('--GIN-args', default={'h_dims': [256], 'dropout': 0.0})
-    parser.add_argument('--my_args', type=str2dict, default={'budget': [5000], 'weight': [1]})
-    parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000], 'd': [0.5], 'sampler': ['CM']},
+    parser.add_argument('--my_args', type=str2dict, default={'sample_budget': [5000], 'ema_weight': [0.9], 'con_weight': [0, 0.5, 1]})
+    parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000,5000], 'd': [0.5], 'sampler': ['CM']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--lwf_args', type=str2dict, default={'lambda_dist': [1.0, 10.0], 'T': [2.0, 20.0]})
     parser.add_argument('--twp_args', type=str2dict, default={'lambda_l': 10000., 'lambda_t': 10000., 'beta': 0.01})

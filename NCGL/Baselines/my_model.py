@@ -2,6 +2,7 @@ import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 from .my_utils import *
+from dgl import DropEdge, FeatMask
 
 samplers = {'ppr': PPR_sampler(plus=False), 'random':random_sampler(plus=False)}
 
@@ -43,8 +44,7 @@ class NET(torch.nn.Module):
         self.net.apply(kaiming_normal_init)
         self.sampler = samplers['ppr']
 
-        # setup optimizer
-        self.opt = torch.optim.Adam(self.net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        
 
         # setup losses
         self.ce = torch.nn.functional.cross_entropy
@@ -53,11 +53,22 @@ class NET(torch.nn.Module):
         self.current_task = -1
         self.prev_model = None
         self.fisher = []
-        self.budget = int(args.my_args['budget'])
+        self.budget = int(args.my_args['sample_budget'])
         self.buffer_node_ids = []
         self.aux_g = None
-        self.weight = args.my_args['weight']
+        self.ema_weight = args.my_args['ema_weight']
         self.epochs = 0
+
+        # setup contrastive loss
+        self.tau: float = 0.5
+        self.drop_edge = DropEdge(0.1)
+        self.mask_node = FeatMask(0.3, node_feat_names=[])
+        self.fc1 = nn.Linear(256, 128, device='cuda:{}'.format(args.gpu))
+        self.fc2 = nn.Linear(128, 256, device='cuda:{}'.format(args.gpu))
+        self.con_weight = args.my_args['con_weight']
+
+        # setup optimizer
+        self.opt = torch.optim.Adam(list(self.net.parameters())+list(self.fc1.parameters())+list(self.fc2.parameters()), lr=args.lr, weight_decay=args.weight_decay)
 
     def forward(self, g, features):
         output = self.net(g, features)
@@ -161,6 +172,7 @@ class NET(torch.nn.Module):
         self.net.zero_grad()
         output_labels = labels[train_ids] # get the labels
         output, _ = self.net(g, features) # get the model outputs
+        second_last_h = self.net.second_last_h
         if args.cls_balance: # choose whether to balance the loss with the class sizes
             n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
             loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
@@ -168,6 +180,19 @@ class NET(torch.nn.Module):
             loss_w_ = [1. for i in range(args.n_cls)]
         loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
         loss = self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
+
+
+
+        ### representation contrastive loss
+        # g_aug2 = self.drop_edge(g).to(device='cuda:{}'.format(args.gpu))
+        features_aug = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
+        output_aug, _ = self.net(g, features_aug)
+        second_last_h_aug=self.net.second_last_h
+        # loss_con = self._con_loss(output[train_ids], output_aug[train_ids])
+        loss_con = self._con_loss(second_last_h[train_ids], second_last_h_aug[train_ids])
+        loss = loss + self.con_weight * loss_con
+
+
 
         if t != 0: # calculate auxiliary loss based on replay if not the first task
             for oldt in range(t):
@@ -194,6 +219,7 @@ class NET(torch.nn.Module):
                 pg = p.grad.data.clone().pow(2)
                 # shape = pg.shape
                 # pg = F.normalize(pg.view(-1),p=2,dim=-1).reshape(shape)
+
                 min_pg = pg.min()
                 max_pg = pg.max()
                 pg = (pg-min_pg)/(max_pg-min_pg)
@@ -219,10 +245,41 @@ class NET(torch.nn.Module):
         if t != 0: # use momentum update to alleviate forgetting if not the first task
             with torch.no_grad():
                 for i, (param_new, param_old) in enumerate(zip(self.net.parameters(), prev_model.net.parameters())):
-                    # reg = self.weight
-                    # reg = cur_epoch/n_epochs*self.weight
+                    # reg = self.ema_weight
+                    # reg = cur_epoch/n_epochs*self.ema_weight
                     reg = self.fisher[i] 
                     param_new.data = (1.0-reg) * param_new.data + reg * param_old.data
+
+
+    def _con_loss(self, z1: torch.Tensor, z2: torch.Tensor, mean: bool = True):
+        h1 = self._projection(z1)
+        h2 = self._projection(z2)
+        l1 = self._semi_loss(h1, h2)
+        l2 = self._semi_loss(h2, h1)
+        ret = (l1 + l2) * 0.5
+        ret = ret.mean() if mean else ret.sum()
+        return ret
+
+
+    def _projection(self, z):   
+        z_proj = F.elu(self.fc1(z))
+        return self.fc2(z_proj)
+    
+    def _sim(self, z1: torch.Tensor, z2: torch.Tensor):
+        z1 = F.normalize(z1)
+        z2 = F.normalize(z2)
+        return torch.mm(z1, z2.t())
+
+
+    def _semi_loss(self, z1: torch.Tensor, z2: torch.Tensor):
+        f = lambda x: torch.exp(x / self.tau)
+        refl_sim = f(self._sim(z1, z1))
+        between_sim = f(self._sim(z1, z2))
+
+        return -torch.log(
+            between_sim.diag()
+            / (refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()))
+    
 
 
     def observe_task_IL_batch(self, args, g, dataloader, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
