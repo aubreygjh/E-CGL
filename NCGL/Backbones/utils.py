@@ -187,7 +187,9 @@ class NodeLevelDataset(incremental_graph_trans_):
             graph, label = data[0], data[0].dstdata['label'].view(-1, 1)
         elif name in ['reddit','Reddit','Reddit-CL']:
             data = RedditDataset(raw_dir=f'{args.ori_data_path}/reddit', self_loop=False)
-            graph, label = data.graph, data.labels.view(-1, 1)
+            # graph, label = data.graph, data.labels.view(-1, 1)
+            graph = data[0]
+            label = graph.ndata['label'].view(-1, 1)
         elif name == 'Arxiv-CL':
             data = DglNodePropPredDataset('ogbn-arxiv', root=f'{args.ori_data_path}/ogb_downloaded')
             graph, label = data[0]

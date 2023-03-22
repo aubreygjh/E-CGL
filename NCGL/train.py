@@ -44,8 +44,8 @@ if __name__ == '__main__':
                                  'attn_drop': .6, 'negative_slope': 0.2, 'residual': False})
     parser.add_argument('--GCN-args', default={'h_dims': [256], 'dropout': 0.0, 'batch_norm': False})
     parser.add_argument('--GIN-args', default={'h_dims': [256], 'dropout': 0.0})
-    parser.add_argument('--my_args', type=str2dict, default={'sample_budget': [5000], 'ema_weight': [0.9], 'con_weight': [0, 0.5, 1]})
-    parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000,5000], 'd': [0.5], 'sampler': ['CM']},
+    parser.add_argument('--my_args', type=str2dict, default={'sample_budget': [5000], 'ema_weight': [0.9], 'con_weight': [0,1]})
+    parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000], 'd': [0.5], 'sampler': ['CM']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--lwf_args', type=str2dict, default={'lambda_dist': [1.0, 10.0], 'T': [2.0, 20.0]})
     parser.add_argument('--twp_args', type=str2dict, default={'lambda_l': 10000., 'lambda_t': 10000., 'beta': 0.01})

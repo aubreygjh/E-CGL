@@ -142,7 +142,7 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         for epoch in range(epochs):
             if args.method in ['my']:
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
-                                               ids_per_cls, dataset, epoch)
+                                               ids_per_cls, dataset)
             elif args.method == 'lwf':
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
                                                ids_per_cls, dataset)
@@ -192,6 +192,7 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         # prev_model = copy.deepcopy(model).cuda(args.gpu)
         prev_model = copy.deepcopy(life_model_ins).cuda(args.gpu)
 
+    print(f'Train Time: {round(np.sum(train_time), 2)}')
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):
@@ -860,7 +861,7 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
         # build the dataloader for mini batch training
         dataloader = dgl.dataloading.NodeDataLoader(subgraph, train_ids, args.nb_sampler,
                                                     batch_size=args.batch_size, shuffle=args.batch_shuffle,
-                                                    drop_last=False)
+                                                    drop_last=False, device='cuda:{}'.format(args.gpu))
 
         start_time = time.time()
         for epoch in range(epochs):
@@ -906,6 +907,7 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
                 pickle.dump(model, f)
         prev_model = copy.deepcopy(life_model_ins).cuda()
 
+    print(f'Train Time: {round(np.sum(train_time), 2)}')
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):
