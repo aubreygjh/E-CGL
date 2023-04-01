@@ -44,7 +44,7 @@ if __name__ == '__main__':
                                  'attn_drop': .6, 'negative_slope': 0.2, 'residual': False})
     parser.add_argument('--GCN-args', default={'h_dims': [256], 'dropout': 0.0, 'batch_norm': False})
     parser.add_argument('--GIN-args', default={'h_dims': [256], 'dropout': 0.0})
-    parser.add_argument('--my_args', type=str2dict, default={'sample_budget': [5000], 'ema_weight': [0.9], 'con_weight': [0,1]})
+    parser.add_argument('--my_args', type=str2dict, default={'sample_budget': [5000], 'ema_weight': [0.9], 'con_weight': [0,1], 'use_ema': False})
     parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000], 'd': [0.5], 'sampler': ['CM']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--lwf_args', type=str2dict, default={'lambda_dist': [1.0, 10.0], 'T': [2.0, 20.0]})
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     method_args = {'ergnn': args.ergnn_args, 'lwf': args.lwf_args, 'twp': args.twp_args, 'ewc': args.ewc_args,
                    'bare': args.bare_args, 'gem': args.gem_args, 'mas': args.mas_args, 'joint': args.joint_args,
                    'my': args.my_args}
-    backbone_args = {'GCN': args.GCN_args, 'GAT': args.GAT_args, 'GIN': args.GIN_args}
+    backbone_args = {'GCN': args.GCN_args, 'GAT': args.GAT_args, 'GIN': args.GIN_args, 'MLP': args.GCN_args}
     hyp_param_list = compose_hyper_params(method_args[args.method])
     AP_best, name_best = 0, None
     AP_dict = {str(hyp_params).replace("'",'').replace(' ','').replace(',','_').replace(':','_'):[] for hyp_params in hyp_param_list}

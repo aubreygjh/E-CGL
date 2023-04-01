@@ -4,7 +4,7 @@ gpu=$2
 
 CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
        --method $method \
-       --backbone GCN \
+       --backbone MLP \
        --gpu 0 \
        --ILmode taskIL \
        --inter-task-edges False \

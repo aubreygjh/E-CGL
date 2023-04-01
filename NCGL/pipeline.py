@@ -3,8 +3,9 @@ import pickle
 import numpy as np
 import time
 import torch
+import torch.utils.data as thdata
 from Backbones.model_factory import get_model
-from Backbones.utils import evaluate, NodeLevelDataset, evaluate_batch
+from Backbones.utils import evaluate, evaluate_batch, NodeLevelDataset, NoGraphDataset
 from training.utils import mkdir_if_missing
 from dataset.utils import semi_task_manager
 import importlib
@@ -117,6 +118,9 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
     model = get_model(dataset, args).cuda(args.gpu) if valid else None
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
     life_model_ins = life_model.NET(model, task_manager, args) if valid else None
+    model_params = sum(p.numel() for p in model.parameters())
+    life_model_params = sum(p.numel() for p in life_model_ins.parameters())
+    print(f"Model Params: {model_params}, {life_model_params}.")
     acc_matrix = np.zeros([args.n_tasks, args.n_tasks])
     meanas = []
     prev_model = None
@@ -136,6 +140,7 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
 
         subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
+        # print(f'Task {task} nodes: {subgraph.number_of_nodes()}, edges: {subgraph.number_of_edges()}.')
         task_manager.add_task(task, n_cls_so_far)
         # train
         start_time = time.time()
@@ -838,6 +843,9 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
     model = get_model(dataset, args).cuda(args.gpu)
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
     life_model_ins = life_model.NET(model, task_manager, args) if valid else None
+    model_params = sum(p.numel() for p in model.parameters())
+    life_model_params = sum(p.numel() for p in life_model_ins.parameters())
+    print(f"Model Params: {model_params}, {life_model_params}.")
     acc_matrix = np.zeros([args.n_tasks, args.n_tasks])
     meanas = []
     prev_model = None
@@ -856,18 +864,25 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
             open(f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{task_cls}.pkl',
                  'rb'))
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
+        # print(f'Task {task} nodes: {subgraph.number_of_nodes()}, edges: {subgraph.number_of_edges()}.')
         task_manager.add_task(task, n_cls_so_far)
 
         # build the dataloader for mini batch training
         dataloader = dgl.dataloading.NodeDataLoader(subgraph, train_ids, args.nb_sampler,
                                                     batch_size=args.batch_size, shuffle=args.batch_shuffle,
-                                                    drop_last=False, device='cuda:{}'.format(args.gpu))
-
+                                                    drop_last=False, device='cuda:{}'.format(args.gpu)) 
+        dataloader_feat = thdata.DataLoader(NoGraphDataset(features, labels), 
+                                            batch_size=args.batch_size,
+                                            shuffle=args.batch_shuffle,
+                                            drop_last=False)
+     
         start_time = time.time()
         for epoch in range(epochs):
-            if args.method in ['lwf', 'my']:
-                life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, prev_model, train_ids, ids_per_cls,
-                                       dataset)
+            if args.method == 'my':
+                # life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, prev_model, train_ids, ids_per_cls, dataset)
+                life_model_ins.observe_task_IL_batch(args, subgraph, dataloader_feat, features, labels, task, prev_model, train_ids, ids_per_cls, dataset)
+            elif args.method == 'lwf':
+                life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, prev_model, train_ids, ids_per_cls, dataset)
             else:
                 life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, train_ids, ids_per_cls, dataset)
                 torch.cuda.empty_cache()  # tracemalloc.stop()

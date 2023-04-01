@@ -9,7 +9,7 @@ from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from ogb.nodeproppred import DglNodePropPredDataset
 import dgl
-from dgl.data import CoraGraphDataset, CoraFullDataset, register_data_args, RedditDataset
+from dgl.data import CoraGraphDataset, CoraFullDataset, register_data_args, RedditDataset, AmazonCoBuyComputerDataset
 from ogb.graphproppred import DglGraphPropPredDataset, collate_dgl, Evaluator
 import copy
 from sklearn.metrics import roc_auc_score, average_precision_score
@@ -185,6 +185,9 @@ class NodeLevelDataset(incremental_graph_trans_):
         elif name in ['CoraFullDataset', 'CoraFull','corafull', 'CoraFull-CL','Corafull-CL']:
             data = CoraFullDataset(f'{args.ori_data_path}/corafull')
             graph, label = data[0], data[0].dstdata['label'].view(-1, 1)
+        elif name in ['Amazon', 'amazon', 'AmazonCoBuy']:
+            data = AmazonCoBuyComputerDataset(f'{args.ori_data_path}/amazoncomputer')
+            graph, label = data[0], data[0].ndata['label'].view(-1, 1)
         elif name in ['reddit','Reddit','Reddit-CL']:
             data = RedditDataset(raw_dir=f'{args.ori_data_path}/reddit', self_loop=False)
             # graph, label = data.graph, data.labels.view(-1, 1)
@@ -231,3 +234,19 @@ class NodeLevelDataset(incremental_graph_trans_):
                 with open(split_name, 'wb') as f:
                     pickle.dump(tr_va_te_split, f)
         super().__init__([[graph, label], tr_va_te_split], n_cls)
+
+
+
+from torch.utils.data import Dataset
+class NoGraphDataset(Dataset):
+    def __init__(self, features, labels):
+        self.features = features
+        self.labels = labels
+
+    def __len__(self):
+        return self.features.shape[0]
+
+    def __getitem__(self, idx):
+        feat = self.features[idx]
+        label = self.labels[idx]
+        return feat, label

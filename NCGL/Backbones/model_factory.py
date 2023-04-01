@@ -1,5 +1,6 @@
 import torch.nn.functional as F
 from .gnns import GAT, GCN, GIN
+from .mlps import MLP_GCN
 
 def get_model(dataset, args):
     n_classes = args.n_cls_per_task
@@ -11,4 +12,6 @@ def get_model(dataset, args):
         model = GCN(args)
     elif args.backbone == 'GIN':
         model = GIN(args)
+    elif args.backbone == 'MLP':
+        model = MLP_GCN(args)
     return model

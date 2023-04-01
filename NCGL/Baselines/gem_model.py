@@ -319,7 +319,8 @@ class NET(nn.Module):
                     except:
                         if no_solution_ind == 0:
                             # avoid output error for each batch
-                            print('no solution situation observed')
+                            # print('no solution situation observed')
+                            continue
                         no_solution_ind = 1
 
             self.opt.step()

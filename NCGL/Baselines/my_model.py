@@ -3,6 +3,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from .my_utils import *
 from dgl import DropEdge, FeatMask
+import time
 
 samplers = {'ppr': PPR_sampler(plus=False), 'random':random_sampler(plus=False)}
 
@@ -56,6 +57,7 @@ class NET(torch.nn.Module):
         self.aux_g = None
         self.ema_weight = args.my_args['ema_weight']
         self.epochs = 0
+        self.use_ema = args.my_args['use_ema']
 
         # setup contrastive loss
         self.tau: float = 0.5
@@ -152,25 +154,21 @@ class NET(torch.nn.Module):
     def observe_task_IL(self, args, g, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
         self.epochs += 1
         last_epoch = self.epochs % args.epochs
-
         ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
         if not isinstance(self.aux_g, list):
             self.aux_g = []
             self.buffer_node_ids = {}
             self.aux_loss_w_ = []
         offset1, offset2 = self.task_manager.get_label_offset(t-1)[1], self.task_manager.get_label_offset(t)[1]  #this is where task-IL and class-IL differs
-        self.net.train()
-
         buffer_size = 0
         for k in self.buffer_node_ids:
             buffer_size+=len(self.buffer_node_ids[k])
         beta = buffer_size/(buffer_size+len(train_ids))
 
-        # ###Learning the new incoming data
-        self.net.zero_grad()
+        self.net.train()
+        # ###A: Learning the new incoming data
         output_labels = labels[train_ids] # get the labels
-        output, _ = self.net(g, features) # get the model outputs
-        second_last_h = self.net.second_last_h
+        output, _ = self.net(features=features) # get the model outputs
         if args.cls_balance: # choose whether to balance the loss with the class sizes
             n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
             loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
@@ -179,23 +177,23 @@ class NET(torch.nn.Module):
         loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
         loss = self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
 
-        ### representation contrastive loss
-        # g_aug2 = self.drop_edge(g).to(device='cuda:{}'.format(args.gpu))
+        # ###B: representation contrastive loss
         features_aug = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
-        output_aug, _ = self.net(g, features_aug)
-        second_last_h_aug = self.net.second_last_h
+        output_aug, _ = self.net(features=features_aug)
         loss_con = self._con_loss(output[train_ids], output_aug[train_ids])
-        # loss_con = self._con_loss(second_last_h[train_ids], second_last_h_aug[train_ids])
         loss = loss + self.con_weight * loss_con
 
-        if t != 0: # calculate auxiliary loss based on replay if not the first task
+        # ###C: calculate auxiliary loss based on replay if not the first task
+        if t != 0: 
             for oldt in range(t):
                 o1, o2 = self.task_manager.get_label_offset(oldt - 1)[1], self.task_manager.get_label_offset(oldt)[1]
                 aux_g = self.aux_g[oldt]
                 aux_features, aux_labels = aux_g.srcdata['feat'], aux_g.dstdata['label'].squeeze()
-                output, _ = self.net(aux_g, aux_features)
+                output, _ = self.net(features=aux_features)
                 loss_aux = self.ce(output[:, o1:o2], aux_labels - o1, weight=self.aux_loss_w_[oldt][o1: o2])
                 loss = beta * loss + (1 - beta) * loss_aux
+
+        self.opt.zero_grad()
         loss.backward()
         self.opt.step()
 
@@ -205,19 +203,19 @@ class NET(torch.nn.Module):
         # task or a new task..
         if last_epoch == 0: 
             # ###Weight Rugularization
-            self.net.zero_grad()
-            output, _ = self.net(g, features)
-            self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2]).backward()
-            self.fisher = []
-            for p in self.net.parameters():
-                pg = p.grad.data.clone().pow(2)
-                # shape = pg.shape
-                # pg = F.normalize(pg.view(-1),p=2,dim=-1).reshape(shape)
+            # self.net.zero_grad()
+            # output, _ = self.net(g, features)
+            # self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2]).backward()
+            # self.fisher = []
+            # for p in self.net.parameters():
+            #     pg = p.grad.data.clone().pow(2)
+            #     # shape = pg.shape
+            #     # pg = F.normalize(pg.view(-1),p=2,dim=-1).reshape(shape)
 
-                min_pg = pg.min()
-                max_pg = pg.max()
-                pg = (pg-min_pg)/(max_pg-min_pg)
-                self.fisher.append(pg)
+            #     min_pg = pg.min()
+            #     max_pg = pg.max()
+            #     pg = (pg-min_pg)/(max_pg-min_pg)
+            #     self.fisher.append(pg)
         
             # ###Replay Module           
             sampled_ids = self.sampler(g, ids_per_cls_train, train_ids, self.budget)
@@ -234,14 +232,12 @@ class NET(torch.nn.Module):
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             self.aux_loss_w_.append(loss_w_)
 
-            # self.current_task = t
-
-        if t != 0: # use momentum update to alleviate forgetting if not the first task
+        if self.use_ema and t != 0: # use momentum update to alleviate forgetting if not the first task
             with torch.no_grad():
                 for i, (param_new, param_old) in enumerate(zip(self.net.parameters(), prev_model.net.parameters())):
-                    # reg = self.ema_weight
+                    reg = (1-self.ema_weight)
                     # reg = cur_epoch/n_epochs*self.ema_weight
-                    reg = self.fisher[i] 
+                    # reg = self.fisher[i] 
                     param_new.data = (1.0-reg) * param_new.data + reg * param_old.data
 
 
@@ -262,57 +258,95 @@ class NET(torch.nn.Module):
         """
         self.epochs += 1
         last_epoch = self.epochs % args.epochs
-
         ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
         if not isinstance(self.aux_g, list):
             self.aux_g = []
             self.buffer_node_ids = {}
             self.aux_loss_w_ = []
         offset1, offset2 = self.task_manager.get_label_offset(t-1)[1], self.task_manager.get_label_offset(t)[1]
+        
         self.net.train()
-
-        # now compute the grad on the current task
-        for input_nodes, output_nodes, blocks in dataloader:
-            n_nodes_current_batch = output_nodes.shape[0]
+        for i, (features, labels) in enumerate(dataloader):
             buffer_size = 0
             for k in self.buffer_node_ids:
-                buffer_size += len(self.buffer_node_ids[k])
-            beta = buffer_size / (buffer_size + n_nodes_current_batch)
+                buffer_size+=len(self.buffer_node_ids[k])
+            beta = buffer_size/(buffer_size+len(train_ids))
+            g = g.to(device=f'cuda:{args.gpu}')
+            features = features.to(f'cuda:{args.gpu}')
+            output_labels = labels.to(f'cuda:{args.gpu}')
 
-            self.net.zero_grad()
-            blocks = [b.to(device='cuda:{}'.format(args.gpu)) for b in blocks]
-            input_features = blocks[0].srcdata['feat']
-            output_labels = blocks[-1].dstdata['label'].squeeze()
-            output_predictions, _ = self.net.forward_batch(blocks, input_features)
-            # second_last_h = self.net.second_last_h
-            if args.cls_balance:
+            # ###A: Learning the new incoming data
+            output, _ = self.net(features=features) # get the model outputs
+            if args.cls_balance: # choose whether to balance the loss with the class sizes
                 n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
                 loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
             else:
                 loss_w_ = [1. for i in range(args.n_cls)]
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
-            loss = self.ce(output_predictions[:, offset1:offset2], output_labels - offset1, weight=loss_w_[offset1: offset2])
-
-            features_aug = drop_feature(input_features, 0.3).to(device='cuda:{}'.format(args.gpu))
-            output_predictions_aug, _ = self.net.forward_batch(blocks, features_aug)
-            # second_last_h_aug = self.net.second_last_h
-            loss_con = self._con_loss(output_predictions, output_predictions_aug)
+            loss = self.ce(output[:, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
+        
+            # ###B: representation contrastive loss
+            features_aug = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
+            output_aug, _ = self.net(features=features_aug)
+            loss_con = self._con_loss(output, output_aug)
             loss = loss + self.con_weight * loss_con
-            
+        
+            # ###C: calculate auxiliary loss based on replay if not the first task
+            if t != 0: 
+                for oldt in range(t):
+                    o1, o2 = self.task_manager.get_label_offset(oldt - 1)[1], self.task_manager.get_label_offset(oldt)[1]
+                    aux_g = self.aux_g[oldt]
+                    aux_features, aux_labels = aux_g.srcdata['feat'], aux_g.dstdata['label'].squeeze()
+                    output, _ = self.net(features=aux_features)
+                    loss_aux = self.ce(output[:, o1:o2], aux_labels - o1, weight=self.aux_loss_w_[oldt][o1: o2])
+                    loss = beta * loss + (1 - beta) * loss_aux
+
+            self.opt.zero_grad()
             loss.backward()
             self.opt.step()
+        '''
+        # # now compute the grad on the current task
+        # for input_nodes, output_nodes, blocks in dataloader:
+        #     n_nodes_current_batch = output_nodes.shape[0]
+        #     buffer_size = 0
+        #     for k in self.buffer_node_ids:
+        #         buffer_size += len(self.buffer_node_ids[k])
+        #     beta = buffer_size / (buffer_size + n_nodes_current_batch)
 
-        if t != 0: 
-            for oldt in range(t):
-                self.net.zero_grad()
-                o1, o2 = self.task_manager.get_label_offset(oldt-1)[1], self.task_manager.get_label_offset(oldt)[1]
-                aux_g = self.aux_g[oldt]
-                aux_features, aux_labels = aux_g.srcdata['feat'], aux_g.dstdata['label'].squeeze()
-                output, _ = self.net(aux_g, aux_features)
-                loss_aux = self.ce(output[:, o1:o2], aux_labels - o1, weight=self.aux_loss_w_[oldt][o1:o2])
-                loss_aux.backward()
-                self.opt.step()
+        #     self.net.zero_grad()
+        #     blocks = [b.to(device='cuda:{}'.format(args.gpu)) for b in blocks]
+        #     input_features = blocks[0].srcdata['feat']
+        #     output_labels = blocks[-1].dstdata['label'].squeeze()
+        #     output_predictions, _ = self.net.forward_batch(blocks, input_features)
+        #     # second_last_h = self.net.second_last_h
+        #     if args.cls_balance:
+        #         n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
+        #         loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
+        #     else:
+        #         loss_w_ = [1. for i in range(args.n_cls)]
+        #     loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
+        #     loss = self.ce(output_predictions[:, offset1:offset2], output_labels - offset1, weight=loss_w_[offset1: offset2])
 
+        #     features_aug = drop_feature(input_features, 0.3).to(device='cuda:{}'.format(args.gpu))
+        #     output_predictions_aug, _ = self.net.forward_batch(blocks, features_aug)
+        #     # second_last_h_aug = self.net.second_last_h
+        #     loss_con = self._con_loss(output_predictions, output_predictions_aug)
+        #     loss = loss + self.con_weight * loss_con
+
+        #     loss.backward()
+        #     self.opt.step()
+
+        # if t != 0: 
+        #     for oldt in range(t):
+        #         self.net.zero_grad()
+        #         o1, o2 = self.task_manager.get_label_offset(oldt-1)[1], self.task_manager.get_label_offset(oldt)[1]
+        #         aux_g = self.aux_g[oldt]
+        #         aux_features, aux_labels = aux_g.srcdata['feat'], aux_g.dstdata['label'].squeeze()
+        #         output, _ = self.net(aux_g, aux_features)
+        #         loss_aux = self.ce(output[:, o1:o2], aux_labels - o1, weight=self.aux_loss_w_[oldt][o1:o2])
+        #         loss_aux.backward()
+        #         self.opt.step()
+        '''
         # sample and store ids from current task
         # this block is for batch training, only execute once in the iteration of a dataloader
         if last_epoch == 0:
@@ -325,17 +359,15 @@ class NET(torch.nn.Module):
             nodes_to_retrive = self.buffer_node_ids[t] #should have other versions
             aux_g, __, _ = dataset.get_graph(node_ids=nodes_to_retrive)
             self.aux_g.append(aux_g.to(device='cuda:{}'.format(args.gpu)))
-            if args.cls_balance:
-                n_per_cls = [(labels[sampled_ids] == j).sum() for j in range(args.n_cls)]
-                loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
-            else:
-                loss_w_ = [1. for i in range(args.n_cls)]
+            # if args.cls_balance:
+            #     n_per_cls = [(labels[sampled_ids] == j).sum() for j in range(args.n_cls)]
+            #     loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
+            # else:
+            loss_w_ = [1. for i in range(args.n_cls)]
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             self.aux_loss_w_.append(loss_w_)
 
-            # self.current_task = t
-
-        if t != 0: # use momentum update to alleviate forgetting if not the first task
+        if self.use_ema and t != 0: # use momentum update to alleviate forgetting if not the first task
             with torch.no_grad():
                 for i, (param_new, param_old) in enumerate(zip(self.net.parameters(), prev_model.net.parameters())):
                     param_new.data = self.ema_weight * param_new.data + (1.0 - self.ema_weight) * param_old.data
@@ -370,7 +402,7 @@ class NET(torch.nn.Module):
             between_sim.diag()
             / (refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()))
 
-
+'''
     # # simplified version
     # def observe_task_IL(self, args, g, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
     #     self.epochs += 1
@@ -540,3 +572,4 @@ class NET(torch.nn.Module):
     #         with torch.no_grad():
     #             for i, (param_new, param_old) in enumerate(zip(self.net.parameters(), prev_model.net.parameters())):
     #                 param_new.data = self.ema_weight * param_new.data + (1.0 - self.ema_weight) * param_old.data
+'''
