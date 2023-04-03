@@ -4,7 +4,7 @@ gpu=$2
 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Products-CL \
 #        --method $method \
-#        --backbone GCN \
+#        --backbone MLP \
 #        --gpu 0 \
 #        --ILmode taskIL \
 #        --inter-task-edges False \
@@ -72,7 +72,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Products-CL \
        --minibatch True \
        --n_cls_per_task 2 \
        --repeats 5 \
-       --overwrite_result True 
+       --overwrite_result False 
 CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Products-CL \
        --method ergnn \
        --backbone GCN \
@@ -82,7 +82,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Products-CL \
        --minibatch True \
        --n_cls_per_task 2 \
        --repeats 5 \
-       --overwrite_result True
+       --overwrite_result False
 CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Products-CL \
        --method joint \
        --backbone GCN \

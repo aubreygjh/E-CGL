@@ -185,10 +185,8 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
-        # time_mean = round(np.mean(train_time), 2)
-        print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(train_time[-1], 2)}s", end="")
-        # print(f"infer_time:{round(infer_time[-1], 2)}s", end="")
+        print(f"acc_mean: {acc_mean}", end="")
+        # print(f"train_time:{round(train_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -871,7 +869,7 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
         dataloader = dgl.dataloading.NodeDataLoader(subgraph, train_ids, args.nb_sampler,
                                                     batch_size=args.batch_size, shuffle=args.batch_shuffle,
                                                     drop_last=False, device='cuda:{}'.format(args.gpu)) 
-        dataloader_feat = thdata.DataLoader(NoGraphDataset(features, labels), 
+        dataloader_feat = thdata.DataLoader(NoGraphDataset(features[train_ids], labels[train_ids]), 
                                             batch_size=args.batch_size,
                                             shuffle=args.batch_shuffle,
                                             drop_last=False)
@@ -911,10 +909,8 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
-        # time_mean = round(np.mean(train_time), 2)
-        print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(train_time[-1], 2)}s", end="")
-        # print(f"infer_time:{round(infer_time[-1], 2)}s", end="")
+        print(f"acc_mean: {acc_mean}", end="")
+        # print(f"train_time:{round(train_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
