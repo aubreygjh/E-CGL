@@ -145,7 +145,7 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         # train
         start_time = time.time()
         for epoch in range(epochs):
-            if args.method in ['my']:
+            if args.method == 'my':
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
                                                ids_per_cls, dataset)
             elif args.method == 'lwf':
@@ -185,14 +185,13 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
-        print(f"acc_mean: {acc_mean}", end="")
-        # print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        print(f"acc_mean: {acc_mean}|", end="")
+        print(f"train_time:{round(train_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
             with open(save_model_path, 'wb') as f:
                 pickle.dump(model, f)  # save the best model for each hyperparameter composition
-        # prev_model = copy.deepcopy(model).cuda(args.gpu)
         prev_model = copy.deepcopy(life_model_ins).cuda(args.gpu)
 
     print(f'Train Time: {round(np.sum(train_time), 2)}')
@@ -909,8 +908,8 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
-        print(f"acc_mean: {acc_mean}", end="")
-        # print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        print(f"acc_mean: {acc_mean}|", end="")
+        print(f"train_time:{round(train_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
