@@ -122,8 +122,8 @@ class NET(torch.nn.Module):
         aug_features = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
         aug_output, _ = self.net(features=aug_features)
         # aug_output, _ = self.net(g, aug_features)
-        
         xxx=torch.empty(0).to(f'cuda:{args.gpu}')
+        
         # ###C: calculate auxiliary loss based on replay if not the first task
         if t != 0: 
             for oldt in range(t):
