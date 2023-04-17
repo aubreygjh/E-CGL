@@ -199,6 +199,10 @@ class NodeLevelDataset(incremental_graph_trans_):
         elif name == 'Products-CL':
             data = DglNodePropPredDataset('ogbn-products', root=f'{args.ori_data_path}/ogb_downloaded')
             graph, label = data[0]
+        elif name == 'Papers100M':
+            data = DglNodePropPredDataset('ogbn-papers100M', root=f'{args.ori_data_path}/ogb_downloaded')
+            graph, label = data[0]
+            # default_split = True
         else:
             print('invalid data name')
         n_cls = data.num_classes

@@ -5,7 +5,7 @@ from .my_utils import *
 from dgl import DropEdge, FeatMask
 import time
 
-samplers = {'ppr': PPR_sampler(plus=False), 'random':random_sampler(plus=False)}
+# samplers = {'ppr': PPR_sampler(plus=False), 'random':random_sampler(plus=False)}
 
 def MultiClassCrossEntropy(logits, labels, T):
     labels = Variable(labels.data, requires_grad=False).cuda()
@@ -45,7 +45,9 @@ class NET(torch.nn.Module):
 
         # setup memory replay
         self.epochs = 0
-        self.sampler = samplers['ppr']
+        self.sampler = PPR_sampler(plus=False, random_ratio=args.my_args['random_ratio'])
+        # self.sampler = samplers['ppr']
+        # self.sampler = samplers['random']
         self.budget = int(args.my_args['sample_budget'])
         self.buffer_node_ids = []
         self.replay_g = None
