@@ -3,15 +3,16 @@ gpu=$2
 
 
 CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
-       --method $method \
+       --method my \
        --backbone MLP \
        --gpu 0 \
        --ILmode taskIL \
        --inter-task-edges False \
        --minibatch True \
        --n_cls_per_task 4 \
-       --repeats 1 \
-       --overwrite_result True 
+       --repeats 5 \
+       --overwrite_result False \
+       --my_args " 'random_ratio': [0.25]; 'sample_budget': [2000]; 'con_weight': [1]" 
 
 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \

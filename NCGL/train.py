@@ -44,8 +44,8 @@ if __name__ == '__main__':
                                  'attn_drop': .6, 'negative_slope': 0.2, 'residual': False})
     parser.add_argument('--GCN-args', default={'h_dims': [256], 'dropout': 0.0, 'batch_norm': False})
     parser.add_argument('--GIN-args', default={'h_dims': [256], 'dropout': 0.0})
-    parser.add_argument('--my_args', type=str2dict, default={'random_ratio':[0,0.25,0.5,0.75,1], 'sample_budget': [5000], 'con_weight': [1], 'ema_weight': [0.9], 'use_ema': False})
-    parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,1000], 'd': [0.5], 'sampler': ['CM']},
+    parser.add_argument('--my_args', type=str2dict, default={'random_ratio':[0.25], 'sample_budget': [5000], 'con_weight': [1]})
+    parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [100,500,1000,2000,5000], 'd': [0.5], 'sampler': ['CM']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--lwf_args', type=str2dict, default={'lambda_dist': [1.0, 10.0], 'T': [2.0, 20.0]})
     parser.add_argument('--twp_args', type=str2dict, default={'lambda_l': 10000., 'lambda_t': 10000., 'beta': 0.01})
@@ -113,6 +113,8 @@ if __name__ == '__main__':
                 hyp_best_str = hyp_params_str
                 name_best = name
                 print(f'best params is {hyp_best_str}, best AP is {AP_best}')
+            show_performance_matrices(f'{args.result_path}/{name}.pkl', save_fig_name=f'{args.dataset}_{args.method}_{list(hyp_params.values())}.pdf')
+            show_learning_curve(f'{args.result_path}/{name}.pkl', save_fig_name=f'{args.dataset}_{args.method}_{list(hyp_params.values())}.pdf')
             continue
         else:
             # if results do not exist or choose to overwrite existing results

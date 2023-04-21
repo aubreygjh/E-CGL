@@ -3,15 +3,16 @@ gpu=$2
 
 
 CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
-       --method $method \
+       --method my \
        --backbone MLP \
        --gpu 0 \
        --ILmode taskIL \
        --inter-task-edges False \
        --minibatch False \
        --n_cls_per_task 5 \
-       --repeats 1 \
-       --overwrite_result True
+       --repeats 5 \
+       --overwrite_result False \
+       --my_args " 'random_ratio': [0.25]; 'sample_budget': [500]; 'con_weight': [1]" 
 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --method bare \

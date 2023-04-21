@@ -12,13 +12,12 @@ class random_sampler(nn.Module):
         self.plus = plus
 
     def forward(self, subgraph, ids_per_cls_train, train_ids, budget):
-        return self.sampling(ids_per_cls_train, train_ids, budget)
+        return self.sampling(ids_per_cls_train, budget)
 
-    def sampling(self,ids_per_cls_train, train_ids, budget):
+    def sampling(self,ids_per_cls_train, budget):
         ids_selected = []
-        # for i,ids in enumerate(ids_per_cls_train):
-        #     ids_selected.extend(random.sample(ids,min(budget,len(ids))))
-        ids_selected = random.sample(train_ids, min(budget, len(train_ids)))
+        for i,ids in enumerate(ids_per_cls_train):
+            ids_selected.extend(random.sample(ids,min(budget,len(ids))))
         return ids_selected
     
 

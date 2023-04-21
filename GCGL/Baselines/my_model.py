@@ -46,7 +46,8 @@ class NET(torch.nn.Module):
         # setup memory replay
         self.epochs = 0
         self.sampler = PPR_sampler(plus=False, random_ratio=args.my_args['random_ratio'])
-        # self.sampler = random_sampler(plus=False)
+        # self.sampler = samplers['ppr']
+        # self.sampler = samplers['random']
         self.budget = int(args.my_args['sample_budget'])
         self.buffer_node_ids = []
         self.replay_g = None
@@ -60,9 +61,9 @@ class NET(torch.nn.Module):
         self.con_weight = args.my_args['con_weight']
 
         # Deprecated: model-EMA
-        # self.fisher = []
-        # self.ema_weight = args.my_args['ema_weight']
-        # self.use_ema = args.my_args['use_ema']
+        self.fisher = []
+        self.ema_weight = args.my_args['ema_weight']
+        self.use_ema = args.my_args['use_ema']
 
         # setup loss&optimizer
         self.ce = torch.nn.functional.cross_entropy
@@ -180,14 +181,14 @@ class NET(torch.nn.Module):
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             self.replay_loss_w_.append(loss_w_)
 
-        # if self.use_ema and t != 0: # use momentum update to alleviate forgetting if not the first task
-        #     with torch.no_grad():
-        #         for i, (param_new, param_old) in enumerate(zip(self.net.parameters(), prev_model.net.parameters())):
-        #             reg = (1-self.ema_weight)
-        #             # e =  args.epochs if last_epoch==0 else last_epoch-1
-        #             # reg = (args.epochs-e)/args.epochs*self.ema_weight
-        #             # reg = self.fisher[i] 
-        #             param_new.data = (1.0-reg) * param_new.data + reg * param_old.data
+        if self.use_ema and t != 0: # use momentum update to alleviate forgetting if not the first task
+            with torch.no_grad():
+                for i, (param_new, param_old) in enumerate(zip(self.net.parameters(), prev_model.net.parameters())):
+                    reg = (1-self.ema_weight)
+                    # e =  args.epochs if last_epoch==0 else last_epoch-1
+                    # reg = (args.epochs-e)/args.epochs*self.ema_weight
+                    # reg = self.fisher[i] 
+                    param_new.data = (1.0-reg) * param_new.data + reg * param_old.data
 
 
     def observe_task_IL_batch(self, args, g, dataloader, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
@@ -319,10 +320,10 @@ class NET(torch.nn.Module):
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             self.replay_loss_w_.append(loss_w_)
 
-        # if self.use_ema and t != 0: # use momentum update to alleviate forgetting if not the first task
-        #     with torch.no_grad():
-        #         for i, (param_new, param_old) in enumerate(zip(self.net.parameters(), prev_model.net.parameters())):
-        #             param_new.data = self.ema_weight * param_new.data + (1.0 - self.ema_weight) * param_old.data
+        if self.use_ema and t != 0: # use momentum update to alleviate forgetting if not the first task
+            with torch.no_grad():
+                for i, (param_new, param_old) in enumerate(zip(self.net.parameters(), prev_model.net.parameters())):
+                    param_new.data = self.ema_weight * param_new.data + (1.0 - self.ema_weight) * param_old.data
 
 
     def _con_loss(self, z1: torch.Tensor, z2: torch.Tensor, z3: torch.Tensor, mean: bool = True):

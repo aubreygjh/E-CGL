@@ -35,9 +35,9 @@ def get_pipeline(args):
                     return pipeline_task_IL_inter_edge_minibatch
             else:
                 if args.method in joint_alias:
-                    return pipeline_task_IL_no_inter_edge_minibatch_joint
+                    return pipeline_task_IL_no_inter_edge_minibatch_joint####
                 else:
-                    return pipeline_task_IL_no_inter_edge_minibatch
+                    return pipeline_task_IL_no_inter_edge_minibatch####
     else:
         if args.ILmode == 'classIL':
             if args.inter_task_edges:
@@ -58,9 +58,9 @@ def get_pipeline(args):
                     return pipeline_task_IL_inter_edge
             else:
                 if args.method in joint_alias:
-                    return pipeline_task_IL_no_inter_edge_joint
+                    return pipeline_task_IL_no_inter_edge_joint####
                 else:
-                    return pipeline_task_IL_no_inter_edge
+                    return pipeline_task_IL_no_inter_edge####
 
 
 def data_prepare(args):
@@ -319,6 +319,7 @@ def pipeline_task_IL_no_inter_edge_joint(args, valid=False):
     meanas = []
     n_cls_so_far = 0
     data_prepare(args)
+    train_time = []
     for task, task_cls in enumerate(args.task_seq):
         name, ite = args.current_model_save_path
         config_name = name.split('/')[-1]
@@ -327,39 +328,67 @@ def pipeline_task_IL_no_inter_edge_joint(args, valid=False):
         save_model_path = f'{args.result_path}/{subfolder_c}val_models/{save_model_name}.pkl'
         n_cls_so_far += len(task_cls)
         task_manager.add_task(task, n_cls_so_far)
-        subgraphs, featuress, labelss, train_idss, ids_per_clss = [], [], [], [], []
-        for t in range(task + 1):
-            subgraph, ids_per_cls, [train_ids, valid_ids, test_ids] = pickle.load(open(
-                f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
-            subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
-            features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-            subgraphs.append(subgraph)
-            featuress.append(features)
-            labelss.append(labels)
-            train_idss.append(train_ids)
-            ids_per_clss.append(ids_per_cls)
+        # subgraphs, featuress, labelss, train_idss, ids_per_clss = [], [], [], [], []
+        # for t in range(task + 1):
+        #     subgraph, ids_per_cls, [train_ids, valid_ids, test_ids] = pickle.load(open(
+        #         f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
+        #     subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
+        #     features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
+        #     subgraphs.append(subgraph)
+        #     featuress.append(features)
+        #     labelss.append(labels)
+        #     train_idss.append(train_ids)
+        #     ids_per_clss.append(ids_per_cls)
+        full_graph= dataset.graph.to(device='cuda:{}'.format(args.gpu))
+        full_features = full_graph.srcdata['feat']
+        full_labels = full_graph.dstdata['label'].squeeze()
+        tr_va_te_split = pickle.load(open(f'{args.data_path}/tr0.6_va0.2_te0.2_split_{args.dataset}.pkl', 'rb'))
+        train_mask = []
+        for cls in task_cls:
+            train_mask.extend(tr_va_te_split[cls][0])                
 
+        #train
+        start_time = time.time()
         for epoch in range(epochs):
-            life_model_ins.observe_task_IL(args, subgraphs, featuress, labelss, task, train_idss, ids_per_clss, dataset)
+            life_model_ins.observe_task_IL(args, full_graph, full_features, full_labels, task, train_mask)
+        end_time = time.time()
+        train_time.append(end_time-start_time)
 
+        #evaluate
         if not valid:
             model = pickle.load(open(save_model_path,'rb')).cuda(args.gpu)
         acc_mean = []
         for t in range(task + 1):
-            subgraph, ids_per_cls, [train_ids, valid_ids_, test_ids_] = pickle.load(open(
-                f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
-            subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
-            test_ids = valid_ids_ if valid else test_ids_
-            ids_per_cls_test = [list(set(ids).intersection(set(test_ids))) for ids in ids_per_cls]
-            features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
+            # subgraph, ids_per_cls, [train_ids, valid_ids_, test_ids_] = pickle.load(open(
+            #     f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
+            # subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
+            # test_ids = valid_ids_ if valid else test_ids_
+            # ids_per_cls_test = [list(set(ids).intersection(set(test_ids))) for ids in ids_per_cls]
+            # features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
+            # label_offset1, label_offset2 = task_manager.get_label_offset(t - 1)[1], task_manager.get_label_offset(t)[1]
+            # labels = labels - label_offset1
+            # if args.classifier_increase:
+            #     acc = evaluate(model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
+            #                    cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
+            # else:
+            #     acc = evaluate(model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
+            #                    cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
+            
+            task_cls = args.task_seq[t]
+            ids_per_cls_test = []
+            test_mask = []
+            for cls in task_cls:
+                if valid:
+                    test_mask.extend(tr_va_te_split[cls][1])
+                    ids_per_cls_test.append(tr_va_te_split[cls][1])
+                else:
+                    test_mask.extend(tr_va_te_split[cls][2])
+                    ids_per_cls_test.append(tr_va_te_split[cls][2])
             label_offset1, label_offset2 = task_manager.get_label_offset(t - 1)[1], task_manager.get_label_offset(t)[1]
-            labels = labels - label_offset1
-            if args.classifier_increase:
-                acc = evaluate(model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
+            full_labels = full_labels - label_offset1
+            acc = evaluate(model, full_graph, full_features, full_labels, test_mask, label_offset1, label_offset2,
                                cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
-            else:
-                acc = evaluate(model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
-                               cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
+
             acc_matrix[task][t] = round(acc * 100, 2)
             acc_mean.append(acc)
             print(f"T{t:02d} {acc * 100:.2f}|", end="")
@@ -369,13 +398,15 @@ def pipeline_task_IL_no_inter_edge_joint(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
-        print(f"acc_mean: {acc_mean}", end="")
+        print(f"acc_mean: {acc_mean}|", end="")
+        print(f"train_time:{round(train_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
             with open(save_model_path, 'wb') as f:
                 pickle.dump(model, f)
 
+    print(f'Train Time: {round(np.sum(train_time), 2)}')
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):
@@ -945,6 +976,7 @@ def pipeline_task_IL_no_inter_edge_minibatch_joint(args, valid=False):
     meanas = []
     n_cls_so_far = 0
     data_prepare(args)
+    train_time = []
     for task, task_cls in enumerate(args.task_seq):
         name, ite = args.current_model_save_path
         config_name = name.split('/')[-1]
@@ -977,8 +1009,11 @@ def pipeline_task_IL_no_inter_edge_minibatch_joint(args, valid=False):
                                                     batch_size=args.batch_size, shuffle=args.batch_shuffle,
                                                     drop_last=False)
 
+        start_time = time.time()
         for epoch in range(epochs):
             life_model_ins.observe_task_IL_batch(args, subgraphs, dataloader, featuress, labelss, task, train_idss, ids_per_clss, dataset)
+        end_time = time.time()
+        train_time.append(end_time-start_time)
 
         if not valid:
             model = pickle.load(open(save_model_path,'rb')).cuda(args.gpu)
@@ -1006,13 +1041,15 @@ def pipeline_task_IL_no_inter_edge_minibatch_joint(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
-        print(f"acc_mean: {acc_mean}", end="")
+        print(f"acc_mean: {acc_mean}|", end="")
+        print(f"train_time:{round(train_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
             with open(save_model_path, 'wb') as f:
                 pickle.dump(model, f)
 
+    print(f'Train Time: {round(np.sum(train_time), 2)}')
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):

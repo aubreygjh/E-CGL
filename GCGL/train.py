@@ -8,7 +8,7 @@ import os
 dir_home = os.getcwd()
 sys.path.append(os.path.join(dir_home,'continual_graph_learning/CGLB')) # for hpc usage
 sys.path.append(os.path.join(dir_home,'.local/lib/python3.7/site-packages')) # for hpc usage
-from NCGL.visualize import *
+from visualize import *
 
 
 if __name__ == '__main__':
