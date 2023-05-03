@@ -76,31 +76,70 @@ class NET(torch.nn.Module):
                 loss += self.ce(output[train_ids], labels, weight=loss_w_)
         loss.backward()
         self.opt.step()
-
-    def observe_task_IL(self, args, full_g, full_features, full_labels, t, train_ids):
+    
+    # def observe_task_IL(self, args, full_g, full_features, full_labels, t, train_ids):
         
-        self.net.train()
+    #     self.net.train()
         
-        if t != self.current_task:
-            self.observed_masks.append(train_ids)
-            self.current_task = t
+    #     if t != self.current_task:
+    #         self.observed_masks.append(train_ids)
+    #         self.current_task = t
 
-        self.net.zero_grad()
-        offset1, offset2 = self.task_manager.get_label_offset(t-1)[1], self.task_manager.get_label_offset(t)[1]
-        output, _ = self.net(full_g, full_features)
+    #     self.net.zero_grad()
+    #     offset1, offset2 = self.task_manager.get_label_offset(t-1)[1], self.task_manager.get_label_offset(t)[1]
+    #     output, _ = self.net(full_g, full_features)
      
-        loss = self.ce(output[train_ids, offset1:offset2], full_labels[train_ids]-offset1)
-        for old_t, mask in enumerate(self.observed_masks[:-1]):
-            offset1, offset2 = self.task_manager.get_label_offset(old_t-1)[1], self.task_manager.get_label_offset(old_t)[1]
-            # output, _ = self.net(full_g, full_features)
-            loss_aux= self.ce(output[mask, offset1:offset2], full_labels[mask]-offset1)
-            loss = loss + loss_aux
+    #     loss = self.ce(output[train_ids, offset1:offset2], full_labels[train_ids]-offset1)
+    #     for old_t, mask in enumerate(self.observed_masks[:-1]):
+    #         offset1, offset2 = self.task_manager.get_label_offset(old_t-1)[1], self.task_manager.get_label_offset(old_t)[1]
+    #         loss_aux= self.ce(output[mask, offset1:offset2], full_labels[mask]-offset1)
+    #         loss = loss + loss_aux
 
-        loss.backward()
-        self.opt.step()
+    #     loss.backward()
+    #     self.opt.step()
 
-    '''
-    def observe_task_IL(self, args, full_g, full_features, full_labels, gs, featuress, labelss, t, train_idss, ids_per_clss, dataset):
+    
+    # def observe_task_IL(self, args, full_g, full_features, full_labels, t, train_ids):
+    #     """
+    #             The method for learning the given tasks under the task-IL setting.
+
+    #             :param args: Same as the args in __init__().
+    #             :param gs: The graphs of all the existing tasks to be jointly trained on.
+    #             :param featuress: Node features of the nodes in all the existing tasks.
+    #             :param labelss: Labels of the nodes in all the existing tasks.
+    #             :param t: Index of the newest task.
+    #             :param train_idss: The indices of the nodes participating in the training in all the existing tasks.
+    #             :param ids_per_clss: Indices of the nodes in each class of all the existing tasks.
+    #             :param dataset: The entire dataset (not in use in the current baseline).
+
+    #             """
+    #     self.net.train()
+    #     if t!=self.current_task:
+    #         self.current_task = t
+    #         self.net.reset_params()
+    #         self.observed_masks.append(train_ids)
+
+    #     self.net.zero_grad()
+    #     loss = 0
+
+    #     for tt in range(t+1):
+    #         train_mask = self.observed_masks[tt]
+    #         # labels = labels_all[train_mask]
+    #         offset1, offset2 = self.task_manager.get_label_offset(tt - 1)[1], self.task_manager.get_label_offset(tt)[1]
+    #         output, _ = self.net(full_g, full_features)
+    #         if args.cls_balance:
+    #             n_per_cls = [(full_labels == j).sum() for j in range(args.n_cls)]
+    #             loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
+    #         else:
+    #             loss_w_ = [1. for i in range(args.n_cls)]
+    #         loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
+    #         loss += self.ce(output[train_mask, offset1:offset2], full_labels[train_mask]-offset1)
+    #     loss.backward()
+    #     self.opt.step()
+    
+
+
+    def observe_task_IL(self, args, gs, featuress, labelss, t, train_idss, ids_per_clss, dataset):
         """
                 The method for learning the given tasks under the task-IL setting.
 
@@ -135,7 +174,7 @@ class NET(torch.nn.Module):
             loss += self.ce(output[train_ids, offset1:offset2], labels-offset1, weight=loss_w_[offset1: offset2])
         loss.backward()
         self.opt.step()
-    '''
+
 
     def observe_task_IL_batch(self, args, gs, dataloader, featuress, labelss, t, train_idss, ids_per_clss, dataset):
         """

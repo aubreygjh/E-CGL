@@ -45,8 +45,10 @@ class NET(torch.nn.Module):
 
         # setup memory replay
         self.epochs = 0
-        self.sampler = PPR_sampler(plus=False, random_ratio=args.my_args['random_ratio'])
-        # self.sampler = random_sampler(plus=False)
+        # self.sampler = PageRank_sampler(plus=False, random_ratio=args.my_args['random_ratio'])
+        # self.sampler = Random_sampler(plus=False)
+        # self.sampler = MFA_sampler(plus=False, random_ratio=args.my_args['random_ratio'])
+        self.sampler = AttriRank_sampler(plus=False)
         self.budget = int(args.my_args['sample_budget'])
         self.buffer_node_ids = []
         self.replay_g = None
@@ -92,7 +94,7 @@ class NET(torch.nn.Module):
 
 
     # original version
-    def observe_task_IL(self, args, g, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
+    def observe_task_IL(self, args, g, features, aug_features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
         self.epochs += 1
         last_epoch = self.epochs % args.epochs
         ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
@@ -119,11 +121,10 @@ class NET(torch.nn.Module):
         loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
         loss = self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
 
-        # ###B: representation contrastive loss
-        aug_features = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
-        aug_output, _ = self.net(features=aug_features)
-        # aug_output, _ = self.net(g, aug_features)
-        xxx=torch.empty(0).to(f'cuda:{args.gpu}')
+        # # ###B: representation contrastive loss
+        # aug_output, _ = self.net(features=aug_features)
+        # # aug_output, _ = self.net(g, aug_features)
+        # xxx=torch.empty(0).to(f'cuda:{args.gpu}')
         
         # ###C: calculate auxiliary loss based on replay if not the first task
         if t != 0: 
@@ -136,19 +137,15 @@ class NET(torch.nn.Module):
                 loss_replay = self.ce(replay_output[:, o1:o2], replay_labels-o1, weight=self.replay_loss_w_[oldt][o1:o2])
                 loss = beta * loss + (1 - beta) * loss_replay
 
-                xxx = replay_output #if oldt==0 else torch.cat([xxx,replay_output],0)
+        #         xxx = replay_output #if oldt==0 else torch.cat([xxx,replay_output],0)
 
-        loss_con = self._con_loss(output[train_ids], aug_output[train_ids], xxx) 
-        loss = loss + self.con_weight * loss_con
+        # loss_con = self._con_loss(output[train_ids], aug_output[train_ids], xxx) 
+        # loss = loss + self.con_weight * loss_con
 
         self.opt.zero_grad()
         loss.backward()
         self.opt.step()
 
-        # if the given task is a new task, set self.current_task to denote the current task index. 
-        # This is mainly designed for the mini-batch training scenario, in which the data of a task 
-        # may not come in simultaneously, and each batch of data may either belong to an existing 
-        # task or a new task..
         if last_epoch == 0: 
             # ###Weight Rugularization
             # self.net.zero_grad()
@@ -166,7 +163,7 @@ class NET(torch.nn.Module):
             #     self.fisher.append(pg)
         
             # ###Replay Module           
-            sampled_ids = self.sampler(g, ids_per_cls_train, train_ids, self.budget)
+            sampled_ids = self.sampler(g, ids_per_cls_train, train_ids, self.budget, output)
             old_ids = g.ndata['_ID'].cpu()# the original node indices before mapping, the original node indices in the whole graph.
             self.buffer_node_ids[t] = old_ids[sampled_ids].tolist()
             nodes_to_retrive = self.buffer_node_ids[t]
@@ -234,10 +231,10 @@ class NET(torch.nn.Module):
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             loss = self.ce(output[:, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
         
-            # ###B: representation contrastive loss
-            aug_features = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
-            aug_output, _ = self.net(features=aug_features)
-            xxx=torch.empty(0).to(f'cuda:{args.gpu}')
+            # # ###B: representation contrastive loss
+            # aug_features = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
+            # aug_output, _ = self.net(features=aug_features)
+            # xxx=torch.empty(0).to(f'cuda:{args.gpu}')
 
             # ###C: calculate auxiliary loss based on replay if not the first task
             if t != 0: 
@@ -249,10 +246,10 @@ class NET(torch.nn.Module):
                     loss_replay = self.ce(replay_output[:, o1:o2], replay_labels - o1, weight=self.replay_loss_w_[oldt][o1: o2])
                     loss = beta * loss + (1 - beta) * loss_replay
 
-                    xxx = replay_output #if oldt==0 else torch.cat([xxx,replay_output],0)
+            #         xxx = replay_output #if oldt==0 else torch.cat([xxx,replay_output],0)
 
-            loss_con = self._con_loss(output, aug_output, xxx)
-            loss = loss + self.con_weight * loss_con
+            # loss_con = self._con_loss(output, aug_output, xxx)
+            # loss = loss + self.con_weight * loss_con
 
             self.opt.zero_grad()
             loss.backward()

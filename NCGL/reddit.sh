@@ -12,7 +12,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
        --n_cls_per_task 4 \
        --repeats 5 \
        --overwrite_result False \
-       --my_args " 'random_ratio': [0.25]; 'sample_budget': [2000]; 'con_weight': [1]" 
+       --my_args " 'random_ratio': [0.25]; 'sample_budget': [2000]; 'con_weight': [0]" 
 
 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
@@ -23,27 +23,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --inter-task-edges False \
 #        --minibatch True \
 #        --n_cls_per_task 4 \
-#        --repeats 10 \
-#        --overwrite_result False 
-# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
-#        --method ewc \
-#        --backbone GCN \
-#        --gpu 0 \
-#        --ILmode taskIL \
-#        --inter-task-edges False \
-#        --minibatch True \
-#        --n_cls_per_task 4 \
-#        --repeats 10 \
-#        --overwrite_result False 
-# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
-#        --method mas \
-#        --backbone GCN \
-#        --gpu 0 \
-#        --ILmode taskIL \
-#        --inter-task-edges False \
-#        --minibatch True \
-#        --n_cls_per_task 4 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --method lwf \
@@ -53,7 +33,27 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --inter-task-edges False \
 #        --minibatch True \
 #        --n_cls_per_task 4 \
-#        --repeats 10 \
+#        --repeats 5 \
+#        --overwrite_result False 
+# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
+#        --method ewc \
+#        --backbone GCN \
+#        --gpu 0 \
+#        --ILmode taskIL \
+#        --inter-task-edges False \
+#        --minibatch True \
+#        --n_cls_per_task 4 \
+#        --repeats 5 \
+#        --overwrite_result False 
+# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
+#        --method mas \
+#        --backbone GCN \
+#        --gpu 0 \
+#        --ILmode taskIL \
+#        --inter-task-edges False \
+#        --minibatch True \
+#        --n_cls_per_task 4 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --method gem \
@@ -63,7 +63,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --inter-task-edges False \
 #        --minibatch True \
 #        --n_cls_per_task 4 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --method twp \
@@ -73,7 +73,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --inter-task-edges False \
 #        --minibatch True \
 #        --n_cls_per_task 4 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --method ergnn \
@@ -83,7 +83,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --inter-task-edges False \
 #        --minibatch True \
 #        --n_cls_per_task 4 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --method joint \
@@ -93,5 +93,5 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
 #        --inter-task-edges False \
 #        --minibatch True \
 #        --n_cls_per_task 4 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 

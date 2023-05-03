@@ -12,6 +12,16 @@ import importlib
 import copy
 import dgl
 
+def drop_feature(x, drop_prob):
+    drop_mask = torch.empty(
+        (x.size(1), ),
+        dtype=torch.float32,
+        device=x.device).uniform_(0, 1) < drop_prob
+    x = x.clone()
+    x[:, drop_mask] = 0
+
+    return x
+
 joint_alias = ['joint', 'Joint', 'joint_replay_all', 'jointtrain']
 def get_pipeline(args):
     # choose the pipeline for the chosen setting
@@ -140,21 +150,20 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
 
         subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-        # print(f'Task {task} nodes: {subgraph.number_of_nodes()}, edges: {subgraph.number_of_edges()}.')
+        aug_features = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
         task_manager.add_task(task, n_cls_so_far)
+
         # train
-        start_time = time.time()
         for epoch in range(epochs):
+            start_time = round(time.time()*1000,3)
             if args.method == 'my':
-                life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
-                                               ids_per_cls, dataset)
+                life_model_ins.observe_task_IL(args, subgraph, features, aug_features, labels, task, prev_model, train_ids,ids_per_cls, dataset)
             elif args.method == 'lwf':
-                life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,
-                                               ids_per_cls, dataset)
+                life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,ids_per_cls, dataset)
             else:
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, train_ids, ids_per_cls, dataset)
-        end_time = time.time()
-        train_time.append(end_time-start_time)
+            end_time = round(time.time()*1000,3)
+            train_time.append(end_time-start_time)
 
         # test
         if not valid:
@@ -179,14 +188,15 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
             acc_matrix[task][t] = round(acc * 100, 2)
             acc_mean.append(acc)
             print(f"T{t:02d} {acc * 100:.2f}|", end="")
-        infer_time.append(time.time()-end_time)
+        # infer_time.append(time.time()-end_time)
         accs = acc_mean[:task + 1]
         meana = round(np.mean(accs) * 100, 2)
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        # print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        print(f"train_time:{round(np.mean(train_time),2)}ms", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -194,7 +204,8 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
                 pickle.dump(model, f)  # save the best model for each hyperparameter composition
         prev_model = copy.deepcopy(life_model_ins).cuda(args.gpu)
 
-    print(f'Train Time: {round(np.sum(train_time), 2)}')
+    # print(f'Train Time: {round(np.sum(train_time), 2)}')
+    # print(f'Train Time: {round(np.mean(train_time), 2)}ms')
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):
@@ -328,65 +339,43 @@ def pipeline_task_IL_no_inter_edge_joint(args, valid=False):
         save_model_path = f'{args.result_path}/{subfolder_c}val_models/{save_model_name}.pkl'
         n_cls_so_far += len(task_cls)
         task_manager.add_task(task, n_cls_so_far)
-        # subgraphs, featuress, labelss, train_idss, ids_per_clss = [], [], [], [], []
-        # for t in range(task + 1):
-        #     subgraph, ids_per_cls, [train_ids, valid_ids, test_ids] = pickle.load(open(
-        #         f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
-        #     subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
-        #     features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-        #     subgraphs.append(subgraph)
-        #     featuress.append(features)
-        #     labelss.append(labels)
-        #     train_idss.append(train_ids)
-        #     ids_per_clss.append(ids_per_cls)
-        full_graph= dataset.graph.to(device='cuda:{}'.format(args.gpu))
-        full_features = full_graph.srcdata['feat']
-        full_labels = full_graph.dstdata['label'].squeeze()
-        tr_va_te_split = pickle.load(open(f'{args.data_path}/tr0.6_va0.2_te0.2_split_{args.dataset}.pkl', 'rb'))
-        train_mask = []
-        for cls in task_cls:
-            train_mask.extend(tr_va_te_split[cls][0])                
+        subgraphs, featuress, labelss, train_idss, ids_per_clss = [], [], [], [], []
+        for t in range(task + 1):
+            subgraph, ids_per_cls, [train_ids, valid_ids, test_ids] = pickle.load(open(
+                f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
+            subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
+            features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
+            subgraphs.append(subgraph)
+            featuress.append(features)
+            labelss.append(labels)
+            train_idss.append(train_ids)
+            ids_per_clss.append(ids_per_cls)          
 
         #train
-        start_time = time.time()
         for epoch in range(epochs):
-            life_model_ins.observe_task_IL(args, full_graph, full_features, full_labels, task, train_mask)
-        end_time = time.time()
-        train_time.append(end_time-start_time)
+            start_time = round(time.time()*1000,3)
+            life_model_ins.observe_task_IL(args, subgraphs, featuress, labelss, task, train_idss, ids_per_clss, dataset)
+            end_time = round(time.time()*1000,3)
+            train_time.append(end_time-start_time)
 
         #evaluate
         if not valid:
             model = pickle.load(open(save_model_path,'rb')).cuda(args.gpu)
         acc_mean = []
         for t in range(task + 1):
-            # subgraph, ids_per_cls, [train_ids, valid_ids_, test_ids_] = pickle.load(open(
-            #     f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
-            # subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
-            # test_ids = valid_ids_ if valid else test_ids_
-            # ids_per_cls_test = [list(set(ids).intersection(set(test_ids))) for ids in ids_per_cls]
-            # features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-            # label_offset1, label_offset2 = task_manager.get_label_offset(t - 1)[1], task_manager.get_label_offset(t)[1]
-            # labels = labels - label_offset1
-            # if args.classifier_increase:
-            #     acc = evaluate(model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
-            #                    cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
-            # else:
-            #     acc = evaluate(model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
-            #                    cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
-            
-            task_cls = args.task_seq[t]
-            ids_per_cls_test = []
-            test_mask = []
-            for cls in task_cls:
-                if valid:
-                    test_mask.extend(tr_va_te_split[cls][1])
-                    ids_per_cls_test.append(tr_va_te_split[cls][1])
-                else:
-                    test_mask.extend(tr_va_te_split[cls][2])
-                    ids_per_cls_test.append(tr_va_te_split[cls][2])
+            subgraph, ids_per_cls, [train_ids, valid_ids_, test_ids_] = pickle.load(open(
+                f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
+            subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
+            test_ids = valid_ids_ if valid else test_ids_
+            ids_per_cls_test = [list(set(ids).intersection(set(test_ids))) for ids in ids_per_cls]
+            features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
             label_offset1, label_offset2 = task_manager.get_label_offset(t - 1)[1], task_manager.get_label_offset(t)[1]
-            full_labels = full_labels - label_offset1
-            acc = evaluate(model, full_graph, full_features, full_labels, test_mask, label_offset1, label_offset2,
+            labels = labels - label_offset1
+            if args.classifier_increase:
+                acc = evaluate(model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
+                               cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
+            else:
+                acc = evaluate(model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
                                cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
 
             acc_matrix[task][t] = round(acc * 100, 2)
@@ -399,14 +388,16 @@ def pipeline_task_IL_no_inter_edge_joint(args, valid=False):
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        print(f"train_time:{round(np.mean(train_time),2)}ms", end="")
+        # print(f"train_time:{round(train_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
             with open(save_model_path, 'wb') as f:
                 pickle.dump(model, f)
 
-    print(f'Train Time: {round(np.sum(train_time), 2)}')
+    # print(f'Train Time: {round(np.sum(train_time), 2)}')
+    # print(f"train_time:{round(np.mean(train_time),2)}ms")
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):
@@ -904,8 +895,9 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
                                             shuffle=args.batch_shuffle,
                                             drop_last=False)
      
-        start_time = time.time()
+        # train
         for epoch in range(epochs):
+            start_time = round(time.time()*1000,3)
             if args.method == 'my':
                 # life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, prev_model, train_ids, ids_per_cls, dataset)
                 life_model_ins.observe_task_IL_batch(args, subgraph, dataloader_feat, features, labels, task, prev_model, train_ids, ids_per_cls, dataset)
@@ -914,8 +906,8 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
             else:
                 life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, train_ids, ids_per_cls, dataset)
                 torch.cuda.empty_cache()  # tracemalloc.stop()
-        end_time = time.time()
-        train_time.append(end_time-start_time)
+            end_time = round(time.time()*1000,3)
+            train_time.append(end_time-start_time)
 
         # test
         if not valid:
@@ -933,14 +925,15 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
             acc_matrix[task][t] = round(acc * 100, 2)
             acc_mean.append(acc)
             print(f"T{t:02d} {acc * 100:.2f}|", end="")
-        infer_time.append(time.time()-end_time)
+        # infer_time.append(time.time()-end_time)
         accs = acc_mean[:task + 1]
         meana = round(np.mean(accs) * 100, 2)
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        print(f"train_time:{round(np.mean(train_time),2)}ms", end="")
+        # print(f"train_time:{round(train_time[-1], 2)}s", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -948,7 +941,8 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
                 pickle.dump(model, f)
         prev_model = copy.deepcopy(life_model_ins).cuda()
 
-    print(f'Train Time: {round(np.sum(train_time), 2)}')
+    # print(f'Train Time: {round(np.sum(train_time), 2)}')
+    # print(f"train_time:{round(np.mean(train_time),2)}ms")
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):
@@ -1009,11 +1003,12 @@ def pipeline_task_IL_no_inter_edge_minibatch_joint(args, valid=False):
                                                     batch_size=args.batch_size, shuffle=args.batch_shuffle,
                                                     drop_last=False)
 
-        start_time = time.time()
+        # train
         for epoch in range(epochs):
+            start_time = round(time.time()*1000,3)
             life_model_ins.observe_task_IL_batch(args, subgraphs, dataloader, featuress, labelss, task, train_idss, ids_per_clss, dataset)
-        end_time = time.time()
-        train_time.append(end_time-start_time)
+            end_time = round(time.time()*1000,3)
+            train_time.append(end_time-start_time)
 
         if not valid:
             model = pickle.load(open(save_model_path,'rb')).cuda(args.gpu)
@@ -1042,14 +1037,16 @@ def pipeline_task_IL_no_inter_edge_minibatch_joint(args, valid=False):
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        # print(f"train_time:{round(train_time[-1], 2)}s", end="")
+        print(f"train_time:{round(np.mean(train_time),2)}ms", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
             with open(save_model_path, 'wb') as f:
                 pickle.dump(model, f)
 
-    print(f'Train Time: {round(np.sum(train_time), 2)}')
+    # print(f'Train Time: {round(np.sum(train_time), 2)}')
+    # print(f"train_time:{round(np.mean(train_time),2)}ms")
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):

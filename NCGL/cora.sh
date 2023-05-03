@@ -10,9 +10,9 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
        --inter-task-edges False \
        --minibatch False \
        --n_cls_per_task 5 \
-       --repeats 5 \
-       --overwrite_result False \
-       --my_args " 'random_ratio': [0.25]; 'sample_budget': [500]; 'con_weight': [1]" 
+       --repeats 1 \
+       --overwrite_result True \
+       --my_args " 'random_ratio': [0.25]; 'sample_budget': [500]; 'con_weight': [0]" 
 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --method bare \
@@ -22,27 +22,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --inter-task-edges False \
 #        --minibatch False \
 #        --n_cls_per_task 5 \
-#        --repeats 10 \
-#        --overwrite_result False 
-# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
-#        --method ewc \
-#        --backbone GCN \
-#        --gpu 0 \
-#        --ILmode taskIL \
-#        --inter-task-edges False \
-#        --minibatch False \
-#        --n_cls_per_task 5 \
-#        --repeats 10 \
-#        --overwrite_result False 
-# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
-#        --method mas \
-#        --backbone GCN \
-#        --gpu 0 \
-#        --ILmode taskIL \
-#        --inter-task-edges False \
-#        --minibatch False \
-#        --n_cls_per_task 5 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --method lwf \
@@ -52,7 +32,27 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --inter-task-edges False \
 #        --minibatch False \
 #        --n_cls_per_task 5 \
-#        --repeats 10 \
+#        --repeats 5 \
+#        --overwrite_result False 
+# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
+#        --method ewc \
+#        --backbone GCN \
+#        --gpu 0 \
+#        --ILmode taskIL \
+#        --inter-task-edges False \
+#        --minibatch False \
+#        --n_cls_per_task 5 \
+#        --repeats 5 \
+#        --overwrite_result False 
+# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
+#        --method mas \
+#        --backbone GCN \
+#        --gpu 0 \
+#        --ILmode taskIL \
+#        --inter-task-edges False \
+#        --minibatch False \
+#        --n_cls_per_task 5 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --method gem \
@@ -62,7 +62,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --inter-task-edges False \
 #        --minibatch False \
 #        --n_cls_per_task 5 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --method twp \
@@ -72,7 +72,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --inter-task-edges False \
 #        --minibatch False \
 #        --n_cls_per_task 5 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --method ergnn \
@@ -82,7 +82,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --inter-task-edges False \
 #        --minibatch False \
 #        --n_cls_per_task 5 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --method joint \
@@ -92,5 +92,5 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --inter-task-edges False \
 #        --minibatch False \
 #        --n_cls_per_task 5 \
-#        --repeats 10 \
+#        --repeats 5 \
 #        --overwrite_result False 

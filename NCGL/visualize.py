@@ -1,6 +1,7 @@
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 def AP_err(performance_matrices):
     # given a list of performence matrices, return the APs the errors (range), and std
@@ -115,3 +116,47 @@ def show_final_APAF_f1(result_path):
     output_str = r'{:.3f}$\pm${:.3f}&{:.3f}$\pm${:.3f}'.format(performance_mean[-1], std_am[-1], AF_mean, std_AF)
     print(r'{:.3f}$\pm${:.3f}&{:.3f}$\pm${:.3f}'.format(performance_mean[-1], std_am[-1], AF_mean, std_AF))
     return output_str
+
+
+if __name__ == '__main__':
+    ### performance matirx on Cora
+    fig=plt.figure(figsize=(10,5))
+    multiplier=1.0
+    axes=[]
+    methods=['Finetune','LwF','EWC','MAS','GEM','TWP','ER-GNN','Joint']#,'E-GCL'
+    for i,method in enumerate(methods):
+        ax = fig.add_subplot(2,4,i+1)
+        performance_matrices = pickle.load(open(f'./figs/matrix/{method}.pkl', 'rb'))
+        acc_matrix_mean = np.mean(performance_matrices, axis=0)
+        mask = np.tri(acc_matrix_mean.shape[0], k=-1).T
+        acc_matrix_mean = np.ma.array(acc_matrix_mean, mask=mask) * multiplier
+        im = plt.imshow(acc_matrix_mean)
+        ax.spines.right.set_visible(False)
+        ax.spines.top.set_visible(False)
+        ax.set_xlabel('$\mathrm{Tasks}$')
+        ax.set_ylabel('$\mathrm{Tasks}$')
+        # ax.set_xticks([0,5,10,15])
+        # ax.set_yticks([0,5,10,15])
+        ax.set_title(method)
+        axes.append(ax)
+    plt.clim(vmin=0, vmax=100)
+    cbar = fig.colorbar(im, ax=axes,ticks=[0, 50, 100])  # , fontsize = 15)
+    cbar.ax.tick_params()
+    plt.savefig('./figs/matrix.pdf', bbox_inches='tight')
+
+    ### learning curve
+    fig = plt.figure(figsize=(10,5))
+    datasets=['Cora','OGBN-Arxiv','Reddit']#,'OGNB-Products'
+    methods=['Finetune','LwF','EWC','MAS','GEM','TWP','ER-GNN','Joint']#,'E-GCL'
+    for i,dataset in enumerate(datasets):
+        ax = fig.add_subplot(1,3,i+1)
+        for method in methods:
+            performance_matrices = pickle.load(open(f'./figs/learning_curve/{dataset}/{method}.pkl','rb'))
+            performance_mean, err, _ = AP_err(performance_matrices)
+            x = list(range(len(performance_mean)))
+            ax.errorbar(x, performance_mean)
+        ax.set_xlabel('Classes')
+        ax.set_ylabel('AP')
+        ax.set_title(dataset)
+    fig.legend()
+    plt.savefig('./figs/learning_curve.pdf', bbox_inches='tight')
