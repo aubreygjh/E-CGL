@@ -15,6 +15,7 @@ class MF_sampler(nn.Module):
             return self.sampling(ids_per_cls_train, budget, feats)
 
     def sampling(self,ids_per_cls_train, budget, vecs):
+        budget = int(budget/len(ids_per_cls_train))
         centers = [vecs[ids].mean(0) for ids in ids_per_cls_train]
         sim = [centers[i].view(1,-1).mm(vecs[ids_per_cls_train[i]].permute(1,0)).squeeze() for i in range(len(centers))]
         rank = [s.sort()[1].tolist() for s in sim]
@@ -37,6 +38,7 @@ class CM_sampler(nn.Module):
             return self.sampling(ids_per_cls_train, budget, feats, d, using_half=using_half)
 
     def sampling(self,ids_per_cls_train, budget, vecs, d, using_half=True):
+        budget = int(budget/len(ids_per_cls_train))
         budget_dist_compute = 1000
         '''
         if using_half:
@@ -81,6 +83,7 @@ class random_sampler(nn.Module):
             return self.sampling(ids_per_cls_train, budget, feats, d)
 
     def sampling(self,ids_per_cls_train, budget, vecs, d):
+        budget = int(budget/len(ids_per_cls_train))
         ids_selected = []
         for i,ids in enumerate(ids_per_cls_train):
             ids_selected.extend(random.sample(ids,min(budget,len(ids))))

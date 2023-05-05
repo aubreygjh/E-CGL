@@ -10,9 +10,9 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \
        --inter-task-edges False \
        --minibatch True \
        --n_cls_per_task 4 \
-       --repeats 5 \
-       --overwrite_result False \
-       --my_args " 'random_ratio': [0.25]; 'sample_budget': [2000]; 'con_weight': [0]" 
+       --repeats 1 \
+       --overwrite_result True \
+       --my_args " 'random_ratio': [0.25]; 'sample_budget': [5000]; 'con_weight': [0]" 
 
 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Reddit-CL \

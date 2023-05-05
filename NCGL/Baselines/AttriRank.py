@@ -27,7 +27,8 @@ class AttriRank(object):
         """
 
         self.graph = np.array(graph)
-        self.featMat = preprocessing.scale(np.array(featureMatrix) / 100.0)
+        # self.featMat = preprocessing.scale(np.array(featureMatrix)/100,axis=1)
+        self.featMat = np.array(featureMatrix)
         self.featCount = self.featMat.shape[1]
 
         if nodeCount is None:
@@ -137,14 +138,14 @@ class AttriRank(object):
         """
         if doTrans:
             self.TransMat()
-            print("\tGenerate transition matrix")
+            # print("\tGenerate transition matrix")
 
         if do:
             if self.Matrix:
                 self.ResetProbMat()
-                print("\tGenerate matrix Q")
-            else:
-                print("\tGenerate reset probability vector")
+                # print("\tGenerate matrix Q")
+            # else:
+            #     print("\tGenerate reset probability vector")
             self.ResetProbVec(kernel=kernel)
 
         if damp == 0:
@@ -196,8 +197,8 @@ class AttriRank(object):
             pi_t += rho_next
             error = np.linalg.norm(rho_next)
 
-            if iteration % self.print_every == (self.print_every - 1):
-                print("\tIteration %d:\t%.10f" % (iteration + 1, error))
+            # if iteration % self.print_every == (self.print_every - 1):
+            #     print("\tIteration %d:\t%.10f" % (iteration + 1, error))
 
             if error < self.convergenceThreshold:
                 break
@@ -208,7 +209,7 @@ class AttriRank(object):
 
         return pi_t
 
-    def runModel(self, factors=[0.85], Matrix=False, track=False,
+    def runModel(self, dampFac=0.85, Matrix=False, track=False,
                  TotalRank=False, alpha=1, beta=1, print_every=1000,
                  kernel='rbf_ap'):
         """
@@ -220,24 +221,25 @@ class AttriRank(object):
         self.Matrix = Matrix
         self.track = track
         self.print_every = print_every
-        scores = {}
+        # scores = {}
 
         if TotalRank:
-            print("Run AttriRank with prior...")
+            # print("Run AttriRank with prior...")
             scores['total'] = list(self.TotalRank(alpha=alpha, beta=beta))
         else:
             do = True
             doTrans = True
-            for dampFac in factors:
-                print("Run AttriRank, damp:", dampFac)
-                score_vec = self.runPageRank(dampFac, do=do, doTrans=doTrans,
+            # for dampFac in factors:
+            # print("Run AttriRank, damp:", dampFac)
+            score_vec = self.runPageRank(dampFac, do=do, doTrans=doTrans,
                                              kernel=kernel)
 
-                # already have reset vector and transition matrix
-                do = False
-                doTrans = False
-                scores[str(dampFac)] = list(score_vec)
-                print("\tDone.")
+            # already have reset vector and transition matrix
+            do = False
+            doTrans = False
+            # scores[str(dampFac)] = list(score_vec)
+            scores = list(score_vec)
+            # print("\tDone.")
 
         self.scores = scores
 

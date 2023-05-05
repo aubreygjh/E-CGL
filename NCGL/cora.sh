@@ -12,7 +12,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
        --n_cls_per_task 5 \
        --repeats 1 \
        --overwrite_result True \
-       --my_args " 'random_ratio': [0.25]; 'sample_budget': [500]; 'con_weight': [0]" 
+       --my_args " 'random_ratio': [0.25]; 'sample_budget': [2000]; 'con_weight': [0]" 
 
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset CoraFull-CL \
 #        --method bare \

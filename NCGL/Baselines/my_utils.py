@@ -4,7 +4,8 @@ import dgl
 import math
 import torch.nn as nn
 import networkx as nx
-from AttriRank import AttriRank
+import dgl.function as fn
+from .AttriRank import AttriRank
 
 class MFA_sampler(nn.Module):
     # sampler for ERGNN MF and MF*
@@ -50,24 +51,32 @@ class AttriRank_sampler(nn.Module):
         return self.sampling(subgraph, feats, ids_per_cls_train, train_ids, budget)
 
     def sampling(self, subgraph, feats, ids_per_cls_train, train_ids, budget):
-        print(subgraph.number_of_nodes(),feats.shape,len(train_ids))
-        print(subgraph, feats[0:5] )
-        # subgraph_ = 
-        # feats_ = 
+        # budget = math.floor(budget*len(train_ids))
+        # budget = int(0.4*len(train_ids))
+        budget = int(budget/2)
         
-        # AR = AttriRank(subgraph_, feats_, itermax=100, weighted=False, nodeCount=len(feat_))
-        # scores = AR.runModel(factors=0.5, kernel='rbf_ap',
-        #                      Matrix=False,TotalRank=False,alpha=1.0,beta=1.0,print_every=100)
+        # ### importance sampling
+        g = subgraph.local_var()
+        src, dst = g.edges()
+        edges = torch.cat([src.unsqueeze(1),dst.unsqueeze(1)],dim=1)# edges = np.array(g.edges().cpu()).T
+        AR = AttriRank(edges.detach().cpu(), feats.detach().cpu(), itermax=1000, weighted=False, nodeCount=feats.shape[0])
+        scores_attrirank = AR.runModel(dampFac=0.85)
+        sorted_attrirank = sorted(range(len(scores_attrirank)),key=lambda x:scores_attrirank[x], reverse=True)
+        
+        ## diversity sampling
+        # g.ndata['feat'] = feats
+        g.update_all(fn.copy_u('feat','m'), fn.mean('m', 'neighbor_feat'))
+        scores_diversity = torch.norm(g.ndata['feat']-g.ndata['neighbor_feat'], dim=1).tolist()
+        sorted_diversity = sorted(range(len(scores_diversity)),key=lambda x:scores_diversity[x], reverse=True)
 
-        ids_selected = []
-        # sorted_pagerank = sorted(scores.items(), key=lambda x:x[1], reverse=True)
-        # sorted_pagerank_lst = []
-        # for item in sorted_pagerank:
-        #     if item[0] in train_ids:
-        #         sorted_pagerank_lst.append(item[0])
-        # pr_list = sorted_pagerank_lst[:min(pr_budget, len(train_ids))]
- 
-        return ids_selected
+        train_ids_set = set(train_ids)
+        sorted_attrirank_idx = [idx for idx in sorted_attrirank if idx in train_ids_set]
+        sorted_diversity_idx = [idx for idx in sorted_diversity if idx in train_ids_set]
+
+        ret = list(set(sorted_attrirank_idx[:min(budget, len(train_ids))]).union(set(sorted_diversity_idx[:min(budget, len(train_ids))])))
+        # ret = sorted_diversity_idx[:min(budget, len(train_ids))]#sorted_attrirank_idx[:min(budget, len(train_ids))] 
+        # print(len(ret)/len(train_ids))
+        return ret
     
 
 class PageRank_sampler(nn.Module):
@@ -111,9 +120,6 @@ class Random_sampler(nn.Module):
         return self.sampling(ids_per_cls_train, train_ids, budget)
 
     def sampling(self,ids_per_cls_train, train_ids, budget):
-        ids_selected = []
-        # for i,ids in enumerate(ids_per_cls_train):
-        #     ids_selected.extend(random.sample(ids,min(budget,len(ids))))
         ids_selected = random.sample(train_ids, min(budget, len(train_ids)))
         return ids_selected
     
@@ -135,6 +141,7 @@ class NearestNeighbor_sampler(nn.Module):
         
         return ids_selected
     
+
 def drop_feature(x, drop_prob):
     drop_mask = torch.empty(
         (x.size(1), ),
