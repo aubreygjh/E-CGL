@@ -44,8 +44,8 @@ if __name__ == '__main__':
                                  'attn_drop': .6, 'negative_slope': 0.2, 'residual': False})
     parser.add_argument('--GCN-args', default={'h_dims': [256], 'dropout': 0.0, 'batch_norm': False})
     parser.add_argument('--GIN-args', default={'h_dims': [256], 'dropout': 0.0})
-    parser.add_argument('--my_args', type=str2dict, default={'random_ratio':[0.25], 'sample_budget': [5000], 'con_weight': [1]})
-    parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [500,2000,5000], 'd': [0.5], 'sampler': ['CM']},
+    parser.add_argument('--my_args', type=str2dict, default={'diversity_ratio':[0.25], 'sample_budget': [5000], 'random_sample':False})
+    parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [5000], 'd': [0.5], 'sampler': ['MF']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--lwf_args', type=str2dict, default={'lambda_dist': [1.0, 10.0], 'T': [2.0, 20.0]})
     parser.add_argument('--twp_args', type=str2dict, default={'lambda_l': 10000., 'lambda_t': 10000., 'beta': 0.01})
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     parser.add_argument('--perform_testing', type=strtobool, default=False, help='')
     args = parser.parse_args()
     args.ratio_valid_test = [float(i) for i in args.ratio_valid_test]
-    set_seed(args)
+    # set_seed(args)
 
     method_args = {'ergnn': args.ergnn_args, 'lwf': args.lwf_args, 'twp': args.twp_args, 'ewc': args.ewc_args,
                    'bare': args.bare_args, 'gem': args.gem_args, 'mas': args.mas_args, 'joint': args.joint_args,
@@ -83,7 +83,9 @@ if __name__ == '__main__':
     AP_dict = {str(hyp_params).replace("'",'').replace(' ','').replace(',','_').replace(':','_'):[] for hyp_params in hyp_param_list}
     AF_dict = {str(hyp_params).replace("'",'').replace(' ','').replace(',','_').replace(':','_'):[] for hyp_params in hyp_param_list}
     PM_dict = {str(hyp_params).replace("'",'').replace(' ','').replace(',','_').replace(':','_'):[] for hyp_params in hyp_param_list}
-    for hyp_params in hyp_param_list:
+    for ii, hyp_params in enumerate(hyp_param_list):
+        args.seed = ii
+        set_seed(args)
         # iterate over each candidate hyper-parameter combination, and find the best one over the validation set
         hyp_params_str = str(hyp_params).replace("'",'').replace(' ','').replace(',','_').replace(':','_')
         print(hyp_params_str)

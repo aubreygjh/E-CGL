@@ -5,6 +5,7 @@ NCGL/dataset/__pycache__
 NCGL/training/__pycache__
 NCGL/data
 NCGL/results
+NCGL/figs
 GCGL/__pycache__
 GCGL/Backbones/__pycache__
 GCGL/Baselines/__pycache__

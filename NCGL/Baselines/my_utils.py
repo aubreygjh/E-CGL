@@ -41,44 +41,6 @@ class MFA_sampler(nn.Module):
         return list(set(ids_selected))
     
 
-class AttriRank_sampler(nn.Module):
-    # sampler for ERGNN CM and CM*
-    def __init__(self, plus):
-        super().__init__()
-        self.plus = plus
-
-    def forward(self, subgraph, ids_per_cls_train, train_ids, budget, feats):
-        return self.sampling(subgraph, feats, ids_per_cls_train, train_ids, budget)
-
-    def sampling(self, subgraph, feats, ids_per_cls_train, train_ids, budget):
-        # budget = math.floor(budget*len(train_ids))
-        # budget = int(0.4*len(train_ids))
-        budget = int(budget/2)
-        
-        # ### importance sampling
-        g = subgraph.local_var()
-        src, dst = g.edges()
-        edges = torch.cat([src.unsqueeze(1),dst.unsqueeze(1)],dim=1)# edges = np.array(g.edges().cpu()).T
-        AR = AttriRank(edges.detach().cpu(), feats.detach().cpu(), itermax=1000, weighted=False, nodeCount=feats.shape[0])
-        scores_attrirank = AR.runModel(dampFac=0.85)
-        sorted_attrirank = sorted(range(len(scores_attrirank)),key=lambda x:scores_attrirank[x], reverse=True)
-        
-        ## diversity sampling
-        # g.ndata['feat'] = feats
-        g.update_all(fn.copy_u('feat','m'), fn.mean('m', 'neighbor_feat'))
-        scores_diversity = torch.norm(g.ndata['feat']-g.ndata['neighbor_feat'], dim=1).tolist()
-        sorted_diversity = sorted(range(len(scores_diversity)),key=lambda x:scores_diversity[x], reverse=True)
-
-        train_ids_set = set(train_ids)
-        sorted_attrirank_idx = [idx for idx in sorted_attrirank if idx in train_ids_set]
-        sorted_diversity_idx = [idx for idx in sorted_diversity if idx in train_ids_set]
-
-        ret = list(set(sorted_attrirank_idx[:min(budget, len(train_ids))]).union(set(sorted_diversity_idx[:min(budget, len(train_ids))])))
-        # ret = sorted_diversity_idx[:min(budget, len(train_ids))]#sorted_attrirank_idx[:min(budget, len(train_ids))] 
-        # print(len(ret)/len(train_ids))
-        return ret
-    
-
 class PageRank_sampler(nn.Module):
     #
     def __init__(self, plus, random_ratio):
@@ -110,6 +72,69 @@ class PageRank_sampler(nn.Module):
         return list(set(random_list).union(set(pr_list)))
 
 
+class AttriRank_sampler(nn.Module):
+    # sampler for ERGNN CM and CM*
+    def __init__(self, plus, diversity_ratio):
+        super().__init__()
+        self.plus = plus
+        self.diversity_ratio = diversity_ratio
+
+    def forward(self, subgraph, ids_per_cls_train, train_ids, budget, feats):
+        return self.sampling(subgraph, feats, ids_per_cls_train, train_ids, budget)
+
+    def sampling(self, subgraph, feats, ids_per_cls_train, train_ids, budget):
+        # budget = int(budget*len(train_ids))
+
+        diversity_budget = math.floor(budget*self.diversity_ratio)
+        importance_budget = budget - diversity_budget
+
+        # ### importance sampling
+        g = subgraph.local_var()
+        src, dst = g.edges()
+        edges = torch.cat([src.unsqueeze(1),dst.unsqueeze(1)],dim=1)# edges = np.array(g.edges().cpu()).T
+        AR = AttriRank(edges.detach().cpu(), feats.detach().cpu(), itermax=1000, weighted=False, nodeCount=feats.shape[0])
+        scores_attrirank = AR.runModel(dampFac=0.85)
+        sorted_attrirank = sorted(range(len(scores_attrirank)),key=lambda x:scores_attrirank[x], reverse=True)
+        
+        # ### diversity sampling
+        g.update_all(fn.copy_u('feat','m'), fn.mean('m', 'neighbor_feat'))
+        scores_diversity = torch.norm(g.ndata['feat']-g.ndata['neighbor_feat'], dim=1).tolist()
+        sorted_diversity = sorted(range(len(scores_diversity)),key=lambda x:scores_diversity[x], reverse=True)
+
+        # ### CM
+        # vecs = feats.half()
+        # budget_dist_compute = 1000
+        # d = 0.5
+        # sorted_diversity_idx = []
+        # for i,ids in enumerate(ids_per_cls_train):
+        #     other_cls_ids = list(range(len(ids_per_cls_train)))
+        #     other_cls_ids.pop(i)
+        #     ids_selected0 = ids_per_cls_train[i] if len(ids_per_cls_train[i])<budget_dist_compute else random.choices(ids_per_cls_train[i], k=budget_dist_compute)
+        #     dist = []
+        #     vecs_0 = vecs[ids_selected0]
+        #     for j in other_cls_ids:
+        #         chosen_ids = random.choices(ids_per_cls_train[j], k=min(budget_dist_compute,len(ids_per_cls_train[j])))
+        #         vecs_1 = vecs[chosen_ids]
+        #         if len(chosen_ids) < 26 or len(ids_selected0) < 26:
+        #             # torch.cdist throws error for tensor smaller than 26
+        #             dist.append(torch.cdist(vecs_0.float(), vecs_1.float()).half())
+        #         else:
+        #             dist.append(torch.cdist(vecs_0,vecs_1))
+        #     dist_ = torch.cat(dist,dim=-1) # include distance to all the other classes
+        #     n_selected = (dist_<d).sum(dim=-1)
+        #     rank = n_selected.sort()[1].tolist()
+        #     current_ids_selected = rank[:budget]
+        #     sorted_diversity_idx.extend([ids_per_cls_train[i][j] for j in current_ids_selected])
+
+        train_ids_set = set(train_ids)
+        sorted_attrirank_idx = [idx for idx in sorted_attrirank if idx in train_ids_set]
+        sorted_diversity_idx = [idx for idx in sorted_diversity if idx in train_ids_set]
+
+
+        ret = list(set(sorted_attrirank_idx[:min(importance_budget, len(train_ids))]).union(set(sorted_diversity_idx[:min(diversity_budget, len(train_ids))])))
+        return ret
+
+
 class Random_sampler(nn.Module):
     # sampler for ERGNN CM and CM*
     def __init__(self, plus):
@@ -121,26 +146,74 @@ class Random_sampler(nn.Module):
 
     def sampling(self,ids_per_cls_train, train_ids, budget):
         ids_selected = random.sample(train_ids, min(budget, len(train_ids)))
+        # ids_selected = train_ids[:min(budget,len(train_ids))]
         return ids_selected
-    
 
-class NearestNeighbor_sampler(nn.Module):
-    #
+
+class MF_sampler(nn.Module):
+    # sampler for ERGNN MF and MF*
     def __init__(self, plus):
         super().__init__()
         self.plus = plus
 
-    def forward(self, subgraph, ids_per_cls_train, budget, feats, reps, d):
-        if self.plus:
-            return self.sampling(ids_per_cls_train, budget, reps, d)
-        else:
-            return self.sampling(ids_per_cls_train, budget, feats, d)
-                                 
-    def sampling(self, ids_per_cls_train, budget, vecs):
+    def forward(self, subgraph, ids_per_cls_train, train_ids, budget, feats):
+        return self.sampling(ids_per_cls_train, budget, feats)
+
+    def sampling(self,ids_per_cls_train, budget, vecs):
+        budget = int(budget/len(ids_per_cls_train))
+        centers = [vecs[ids].mean(0) for ids in ids_per_cls_train]
+        sim = [centers[i].view(1,-1).mm(vecs[ids_per_cls_train[i]].permute(1,0)).squeeze() for i in range(len(centers))]
+        rank = [s.sort()[1].tolist() for s in sim]
         ids_selected = []
-        
+        for i,ids in enumerate(ids_per_cls_train):
+            nearest = rank[i][0:min(budget, len(ids_per_cls_train[i]))]
+            ids_selected.extend([ids[i] for i in nearest])
         return ids_selected
     
+
+class CM_sampler(nn.Module):
+    # sampler for ERGNN CM and CM*
+    def __init__(self, plus):
+        super().__init__()
+        self.plus = plus
+
+    def forward(self, subgraph, ids_per_cls_train, train_ids, budget, feats, d=0.5, using_half=True):
+        return self.sampling(ids_per_cls_train, budget, feats, d, using_half=using_half)
+  
+
+    def sampling(self,ids_per_cls_train, budget, vecs, d, using_half=True):
+        budget = int(budget/len(ids_per_cls_train))
+        budget_dist_compute = 1000
+        '''
+        if using_half:
+            vecs = vecs.half()
+        '''
+        vecs = vecs.half()
+        ids_selected = []
+        for i,ids in enumerate(ids_per_cls_train):
+            other_cls_ids = list(range(len(ids_per_cls_train)))
+            other_cls_ids.pop(i)
+            ids_selected0 = ids_per_cls_train[i] if len(ids_per_cls_train[i])<budget_dist_compute else random.choices(ids_per_cls_train[i], k=budget_dist_compute)
+
+            dist = []
+            vecs_0 = vecs[ids_selected0]
+            for j in other_cls_ids:
+                chosen_ids = random.choices(ids_per_cls_train[j], k=min(budget_dist_compute,len(ids_per_cls_train[j])))
+                vecs_1 = vecs[chosen_ids]
+                if len(chosen_ids) < 26 or len(ids_selected0) < 26:
+                    # torch.cdist throws error for tensor smaller than 26
+                    dist.append(torch.cdist(vecs_0.float(), vecs_1.float()).half())
+                else:
+                    dist.append(torch.cdist(vecs_0,vecs_1))
+
+            #dist = [torch.cdist(vecs[ids_selected0], vecs[random.choices(ids_per_cls_train[j], k=min(budget_dist_compute,len(ids_per_cls_train[j])))]) for j in other_cls_ids]
+            dist_ = torch.cat(dist,dim=-1) # include distance to all the other classes
+            n_selected = (dist_<d).sum(dim=-1)
+            rank = n_selected.sort()[1].tolist()
+            current_ids_selected = rank[:budget]
+            ids_selected.extend([ids_per_cls_train[i][j] for j in current_ids_selected])
+        return ids_selected
+
 
 def drop_feature(x, drop_prob):
     drop_mask = torch.empty(
