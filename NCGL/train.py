@@ -44,7 +44,7 @@ if __name__ == '__main__':
                                  'attn_drop': .6, 'negative_slope': 0.2, 'residual': False})
     parser.add_argument('--GCN-args', default={'h_dims': [256], 'dropout': 0.0, 'batch_norm': False})
     parser.add_argument('--GIN-args', default={'h_dims': [256], 'dropout': 0.0})
-    parser.add_argument('--my_args', type=str2dict, default={'diversity_ratio':[0.25], 'sample_budget': [5000], 'random_sample':False})
+    parser.add_argument('--my_args', type=str2dict, default={'diversity_ratio':[0.25], 'sample_budget': [5000], 'random_sample':False}) #, 'lambda_replay':[1.0]
     parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [5000], 'd': [0.5], 'sampler': ['MF']},
                         help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--lwf_args', type=str2dict, default={'lambda_dist': [1.0, 10.0], 'T': [2.0, 20.0]})

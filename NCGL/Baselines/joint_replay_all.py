@@ -32,14 +32,13 @@ class NET(torch.nn.Module):
 
         # setup memories
         self.current_task = -1
-        self.observed_masks = []
 
     def forward(self, features):
         output = self.net(features)
         return output
 
 
-    def observe(self, args, g_entire, train_ids_entire, gs, featuress, labelss, t, train_idss, ids_per_clss, dataset):
+    def observe(self, args, gs, featuress, labelss, t, train_idss, ids_per_clss, dataset):
         """
                 The method for learning the given tasks under the class-IL setting.
 
@@ -60,30 +59,22 @@ class NET(torch.nn.Module):
 
         self.net.zero_grad()
         loss = 0
-
-        features_entire = g_entire.ndata['feat'].to(f'cuda:{args.gpu}')
-        labels_entire = g_entire.ndata['label'].to(f'cuda:{args.gpu}').squeeze()
-        output, _ = self.net(g_entire, features_entire)
-        loss = self.ce(output[train_ids_entire], labels_entire[train_ids_entire])
-
-
-        # offset1, offset2 = self.task_manager.get_label_offset(t)
-        # for g,features, labels_all, train_ids, ids_per_cls in zip(gs, featuress, labelss, train_idss, ids_per_clss):
-        #     labels = labels_all[train_ids]
-        #     output, _ = self.net(g, features)
-        #     if args.cls_balance:
-        #         n_per_cls = [(labels == j).sum() for j in range(args.n_cls)]
-        #         loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
-        #     else:
-        #         loss_w_ = [1. for i in range(args.n_cls)]
-        #     loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
-        #     if args.classifier_increase:
-        #         loss += self.ce(output[train_ids, offset1:offset2], labels, weight=loss_w_[offset1: offset2])
-        #     else:
-        #         loss += self.ce(output[train_ids], labels, weight=loss_w_)
+        offset1, offset2 = self.task_manager.get_label_offset(t)
+        for g,features, labels_all, train_ids, ids_per_cls in zip(gs, featuress, labelss, train_idss, ids_per_clss):
+            labels = labels_all[train_ids]
+            output, _ = self.net(g, features)
+            if args.cls_balance:
+                n_per_cls = [(labels == j).sum() for j in range(args.n_cls)]
+                loss_w_ = [1. / max(i, 1) for i in n_per_cls]  # weight to balance the loss of different class
+            else:
+                loss_w_ = [1. for i in range(args.n_cls)]
+            loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
+            if args.classifier_increase:
+                loss += self.ce(output[train_ids, offset1:offset2], labels, weight=loss_w_[offset1: offset2])
+            else:
+                loss += self.ce(output[train_ids], labels, weight=loss_w_)
         loss.backward()
         self.opt.step()
-    
 
     def observe_task_IL(self, args, gs, featuress, labelss, t, train_idss, ids_per_clss, dataset):
         """
@@ -120,7 +111,6 @@ class NET(torch.nn.Module):
             loss += self.ce(output[train_ids, offset1:offset2], labels-offset1, weight=loss_w_[offset1: offset2])
         loss.backward()
         self.opt.step()
-
 
     def observe_task_IL_batch(self, args, gs, dataloader, featuress, labelss, t, train_idss, ids_per_clss, dataset):
         """
@@ -199,7 +189,7 @@ class NET(torch.nn.Module):
                 loss_w_ = [1. for i in range(args.n_cls)]
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             output_predictions,_ = self.net.forward_batch(blocks, input_features)
-            loss = self.ce(output_predictions, output_labels)
+            loss = self.ce(output_predictions[:,offset1:offset2], output_labels, weight=loss_w_[offset1:offset2])
             loss.backward()
             self.opt.step()
 

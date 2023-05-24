@@ -119,30 +119,31 @@ def show_final_APAF_f1(result_path):
 
 
 if __name__ == '__main__':
-    # ### performance matirx on Cora
-    # fig=plt.figure(figsize=(10,5))
-    # multiplier=1.0
-    # axes=[]
-    # methods=['Finetune','LwF','EWC','MAS','TWP','ER-GNN','E-CGL','Joint']#'GEM',
-    # for i,method in enumerate(methods):
-    #     ax = fig.add_subplot(2,4,i+1)
-    #     performance_matrices = pickle.load(open(f'./figs/matrix/{method}.pkl', 'rb'))
-    #     acc_matrix_mean = np.mean(performance_matrices, axis=0)
-    #     mask = np.tri(acc_matrix_mean.shape[0], k=-1).T
-    #     acc_matrix_mean = np.ma.array(acc_matrix_mean, mask=mask) * multiplier
-    #     im = plt.imshow(acc_matrix_mean)
-    #     ax.spines.right.set_visible(False)
-    #     ax.spines.top.set_visible(False)
-    #     ax.set_xlabel('$\mathrm{Tasks}$')
-    #     ax.set_ylabel('$\mathrm{Tasks}$')
-    #     # ax.set_xticks([0,5,10,15])
-    #     # ax.set_yticks([0,5,10,15])
-    #     ax.set_title(method)
-    #     axes.append(ax)
-    # plt.clim(vmin=0, vmax=100)
-    # cbar = fig.colorbar(im, ax=axes,ticks=[0, 50, 100])  # , fontsize = 15)
-    # cbar.ax.tick_params()
-    # plt.savefig('./figs/matrix.pdf', bbox_inches='tight')
+    ### performance matirx on Cora
+    fig=plt.figure(figsize=(10,10))
+    multiplier=1.0
+    axes=[]
+    methods=['Finetune','LwF','EWC','MAS','GEM','TWP','ER-GNN','E-CGL', 'Joint']
+    dataset = 'cora'
+    for i,method in enumerate(methods):
+        ax = fig.add_subplot(3,3,i+1)
+        performance_matrices = pickle.load(open(f'./figs/matrix_{dataset}/{method}.pkl', 'rb'))
+        acc_matrix_mean = np.mean(performance_matrices, axis=0)
+        mask = np.tri(acc_matrix_mean.shape[0], k=-1).T
+        acc_matrix_mean = np.ma.array(acc_matrix_mean, mask=mask) * multiplier
+        im = plt.imshow(acc_matrix_mean)
+        ax.spines.right.set_visible(False)
+        ax.spines.top.set_visible(False)
+        ax.set_xlabel('$\mathrm{Tasks}$',loc='right')
+        ax.set_ylabel('$\mathrm{Tasks}$',loc='top')
+        ax.set_xticks([0,13])
+        ax.set_yticks([0,13])
+        ax.set_title(method)
+        axes.append(ax)
+    plt.clim(vmin=0, vmax=100)
+    cbar = fig.colorbar(im, ax=axes,ticks=[0, 50, 100])  # , fontsize = 15)
+    cbar.ax.tick_params()
+    plt.savefig(f'./figs/matrix_{dataset}.pdf', bbox_inches='tight')
 
     ### learning curve
     fig = plt.figure(figsize=(13,4.5))

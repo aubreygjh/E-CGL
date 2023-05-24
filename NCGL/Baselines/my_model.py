@@ -2,7 +2,6 @@ import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 from .my_utils import *
-from dgl import DropEdge, FeatMask
 
 
 def MultiClassCrossEntropy(logits, labels, T):
@@ -51,7 +50,7 @@ class NET(torch.nn.Module):
             self.sampler = CM_sampler(plus=False)
         elif args.my_args['random_sample'] == 'MF':
             self.sampler = MF_sampler(plus=False)
-        self.budget = int(args.my_args['sample_budget']) # self.budget = args.my_args['sample_budget'] 
+        self.budget = int(args.my_args['sample_budget'])  
         self.buffer_node_ids = []
         self.replay_g = None
         
@@ -66,13 +65,15 @@ class NET(torch.nn.Module):
         # setup loss&optimizer
         self.ce = torch.nn.functional.cross_entropy
         self.opt = torch.optim.Adam(self.net.parameters(), lr=args.lr, weight_decay=args.weight_decay) #list(self.net.parameters())+list(self.fc1.parameters())+list(self.fc2.parameters())
+        # self.lambda_replay = args.my_args['lambda_replay']
 
     def forward(self, g, features):
         output = self.net(g, features)
         return output
     
-                
-    def observe(self, args, g, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
+
+    # classIL setting
+    def observe(self, args, g, features, labels, t, train_ids, ids_per_cls, dataset):
         """
                 The method for learning the given tasks. Each time a new task is presented, this function will be called to learn the task. Therefore, how the model adapts to new tasks and prevent forgetting on old tasks are all implemented in this function.
                 More detailed comments accompanying the code can be found in the source code of this template in our GitHub repository.
@@ -82,15 +83,62 @@ class NET(torch.nn.Module):
                 :param features: Node features of the current task.
                 :param labels: Labels of the nodes in the current task.
                 :param t: Index of the current task.
-                :param prev_model: The model obtained after learning the previous task.
                 :param train_ids: The indices of the nodes participating in the training.
                 :param ids_per_cls: Indices of the nodes in each class (not in use in the current baseline).
                 :param dataset: The entire dataset (not in use in the current baseline).
 
                 """
-    '''
+        self.epochs += 1
+        last_epoch = self.epochs % args.epochs
+        ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
+        offset1, offset2 = self.task_manager.get_label_offset(t) 
+        buffer_size = len(self.buffer_node_ids)
+        beta = buffer_size/(buffer_size+len(train_ids))
+
+        self.net.train()
+        # ###A: Learning the new incoming data
+        output_labels = labels[train_ids]
+        output, _ = self.net(features=features)     ### MLP
+        # output, _ = self.net(g, features)         ### GCN
+        second_last_h = self.net.second_last_h
+        if args.cls_balance: 
+            n_per_cls = [(output_labels == j).sum() for j in range(args.n_cls)]
+            loss_w_ = [1. / max(i, 1) for i in n_per_cls]  
+        else:
+            loss_w_ = [1. for i in range(args.n_cls)]
+        loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
+        loss = self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
+
+        # ###C: calculate auxiliary loss based on replay if not the first task
+        if t != 0: 
+            replay_features, replay_labels = self.replay_g.srcdata['feat'], self.replay_g.dstdata['label'].squeeze()
+            replay_output, _ = self.net(features=replay_features)     ### MLP
+            # replay_output, _ = self.net(self.replay_g, replay_features)  ### GCN
+            loss_replay = self.ce(replay_output[:, :offset2], replay_labels, weight=self.replay_loss_w_[:offset2])
+            loss = loss + loss_replay #loss =  beta*loss + (1-beta)*loss_replay
+
+        self.opt.zero_grad()
+        loss.backward()
+        self.opt.step()
+
+        if last_epoch == 0: 
+            # ###Replay Module           
+            sampled_ids = self.sampler(g, ids_per_cls_train, train_ids, self.budget, output)#features second_last_h output
+            old_ids = g.ndata['_ID'].cpu()# the original node indices before mapping, the original node indices in the whole graph.
+            self.buffer_node_ids.extend(old_ids[sampled_ids].tolist())
+            nodes_to_retrive = list(set(self.buffer_node_ids))
+            replay_g, _, _ = dataset.get_graph(node_ids=nodes_to_retrive)
+            self.replay_g=replay_g.to(device=f'cuda:{features.get_device()}')
+            if args.cls_balance:
+                n_per_cls = [(labels[sampled_ids] == j).sum() for j in range(args.n_cls)]
+                loss_w_ = [1. / max(i, 1) for i in n_per_cls]  
+            else:
+                loss_w_ = [1. for i in range(args.n_cls)]
+            self.replay_loss_w_= torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
+
+    
     # simplified version
-    def observe_task_IL(self, args, g, features, aug_features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
+    def observe_task_IL(self, args, g, features, labels, t, train_ids, ids_per_cls, dataset):
         self.epochs += 1
         last_epoch = self.epochs % args.epochs
         ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
@@ -141,7 +189,7 @@ class NET(torch.nn.Module):
 
     '''
     # original version
-    def observe_task_IL(self, args, g, features, aug_features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
+    def observe_task_IL(self, args, g, features, labels, t, train_ids, ids_per_cls, dataset):
         self.epochs += 1
         last_epoch = self.epochs % args.epochs
         ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
@@ -207,9 +255,9 @@ class NET(torch.nn.Module):
                 loss_w_ = [1. for i in range(args.n_cls)]
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             self.replay_loss_w_.append(loss_w_)
-
+    '''
     
-    def observe_task_IL_batch(self, args, g, dataloader, features, labels, t, prev_model, train_ids, ids_per_cls, dataset):
+    def observe_task_IL_batch(self, args, g, dataloader, features, labels, t, train_ids, ids_per_cls, dataset):
         self.epochs += 1
         last_epoch = self.epochs % args.epochs
         ids_per_cls_train = [list(set(ids).intersection(set(train_ids))) for ids in ids_per_cls]
@@ -324,7 +372,7 @@ class NET(torch.nn.Module):
             loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
             self.replay_loss_w_.append(loss_w_)
 
-
+    '''DEPRECATED CONTRASTIVE LOSS
     def _con_loss(self, z1: torch.Tensor, z2: torch.Tensor, z3: torch.Tensor, mean: bool = True):
         h1 = self._projection(z1)
         h2 = self._projection(z2)
@@ -353,3 +401,4 @@ class NET(torch.nn.Module):
         return -torch.log(
             between_sim.diagonal(offset=0,dim1=0,dim2=1)
             / (refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()))
+    '''

@@ -156,9 +156,7 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         # train
         for epoch in range(epochs):
             start_time = round(time.time()*1000,3)
-            if args.method == 'my':
-                life_model_ins.observe_task_IL(args, subgraph, features, aug_features, labels, task, prev_model, train_ids,ids_per_cls, dataset)
-            elif args.method == 'lwf':
+            if args.method == 'lwf':
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, prev_model, train_ids,ids_per_cls, dataset)
             else:
                 life_model_ins.observe_task_IL(args, subgraph, features, labels, task, train_ids, ids_per_cls, dataset)
@@ -695,8 +693,6 @@ def pipeline_class_IL_no_inter_edge_joint(args, valid=False):
     n_cls_so_far = 0
     data_prepare(args)
     for task, task_cls in enumerate(args.task_seq):
-        if task != len(args.task_seq)-1:
-            continue
         name, ite = args.current_model_save_path
         config_name = name.split('/')[-1]
         subfolder_c = name.split(config_name)[-2]
@@ -704,7 +700,7 @@ def pipeline_class_IL_no_inter_edge_joint(args, valid=False):
         save_model_path = f'{args.result_path}/{subfolder_c}val_models/{save_model_name}.pkl'
         n_cls_so_far += len(task_cls)
         task_manager.add_task(task, n_cls_so_far)
-        subgraphs, featuress, labelss, train_idss, test_idss, ids_per_clss = [], [], [], [], [], []
+        subgraphs, featuress, labelss, train_idss, ids_per_clss = [], [], [], [], []
         for t in range(task + 1):
             subgraph, ids_per_cls, [train_ids, valid_idx, test_ids] = pickle.load(open(
                 f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
@@ -714,36 +710,10 @@ def pipeline_class_IL_no_inter_edge_joint(args, valid=False):
             featuress.append(features)
             labelss.append(labels)
             train_idss.append(train_ids)
-            test_idss.append(test_ids)
             ids_per_clss.append(ids_per_cls)
-                # build the dataloader for mini batch training
-        train_ids_entire = []
-        test_ids_entire = []
-        n_existing_nodes = 0
-        for test_ids, ids, g in zip(test_idss, train_idss, subgraphs):
-            new_ids = [i + n_existing_nodes for i in ids]
-            train_ids_entire.extend(new_ids)
-            new_test_ids = [i + n_existing_nodes for i in test_ids]
-            test_ids_entire.extend(new_test_ids)
-            n_existing_nodes += g.num_nodes()
-        graph_entire = dgl.batch(subgraphs)
 
-        print("train last task nobatch")
         for epoch in range(epochs):
-            life_model_ins.observe(args, graph_entire, train_ids_entire, subgraphs, featuress, labelss, task, train_idss, ids_per_clss, dataset)
-
-        print("test last task nobatch")
-        model.eval()
-        with torch.no_grad():
-            output, _ = model(graph_entire, graph_entire.ndata['feat'])
-            logits = output[test_ids_entire, :]
-            labels = graph_entire.ndata['label'].squeeze()
-            labels = labels[test_ids_entire]
-            _, indices = torch.max(logits, dim=1)
-            correct = torch.sum(indices == labels)
-            acc =  correct.item() * 1.0 / labels.shape[0]
-        print(f"acc for all:{acc}")
-
+            life_model_ins.observe(args, subgraphs, featuress, labelss, task, train_idss, ids_per_clss, dataset)
 
         label_offset1, label_offset2 = task_manager.get_label_offset(task)
         if not valid:
@@ -925,8 +895,8 @@ def pipeline_task_IL_no_inter_edge_minibatch(args, valid=False):
         for epoch in range(epochs):
             start_time = round(time.time()*1000,3)
             if args.method == 'my':
-                life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, prev_model, train_ids, ids_per_cls, dataset)
-                # life_model_ins.observe_task_IL_batch(args, subgraph, dataloader_feat, features, labels, task, prev_model, train_ids, ids_per_cls, dataset)
+                life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, train_ids, ids_per_cls, dataset)
+                # life_model_ins.observe_task_IL_batch(args, subgraph, dataloader_feat, features, labels, task, train_ids, ids_per_cls, dataset)
             elif args.method == 'lwf':
                 life_model_ins.observe_task_IL_batch(args, subgraph, dataloader, features, labels, task, prev_model, train_ids, ids_per_cls, dataset)
             else:
@@ -1101,9 +1071,6 @@ def pipeline_class_IL_no_inter_edge_minibatch_joint(args, valid=False):
     n_cls_so_far = 0
     data_prepare(args)
     for task, task_cls in enumerate(args.task_seq):
-        if task != len(args.task_seq)-1:
-            continue
-        print("train last task")
         name, ite = args.current_model_save_path
         config_name = name.split('/')[-1]
         subfolder_c = name.split(config_name)[-2]
@@ -1111,7 +1078,7 @@ def pipeline_class_IL_no_inter_edge_minibatch_joint(args, valid=False):
         save_model_path = f'{args.result_path}/{subfolder_c}val_models/{save_model_name}.pkl'
         n_cls_so_far += len(task_cls)
         task_manager.add_task(task, n_cls_so_far)
-        subgraphs, featuress, labelss, train_idss, test_idss, ids_per_clss = [], [], [], [], [], []
+        subgraphs, featuress, labelss, train_idss, ids_per_clss = [], [], [], [], []
         for t in range(task + 1):
             subgraph, ids_per_cls, [train_ids, valid_idx, test_ids] = pickle.load(open(
                 f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
@@ -1120,55 +1087,30 @@ def pipeline_class_IL_no_inter_edge_minibatch_joint(args, valid=False):
             featuress.append(features)
             labelss.append(labels)
             train_idss.append(train_ids)
-            test_idss.append(test_ids)
             ids_per_clss.append(ids_per_cls)
 
         # build the dataloader for mini batch training
         train_ids_entire = []
-        test_ids_entire = []
         n_existing_nodes = 0
-        for test_ids, ids, g in zip(test_idss, train_idss, subgraphs):
+        for ids, g in zip(train_idss, subgraphs):
             new_ids = [i + n_existing_nodes for i in ids]
             train_ids_entire.extend(new_ids)
-            new_test_ids = [i + n_existing_nodes for i in test_ids]
-            test_ids_entire.extend(new_test_ids)
             n_existing_nodes += g.num_nodes()
 
         graph_entire = dgl.batch(subgraphs)
         dataloader = dgl.dataloading.NodeDataLoader(graph_entire, train_ids_entire, args.nb_sampler,
                                                     batch_size=args.batch_size, shuffle=args.batch_shuffle,
                                                     drop_last=False)
-        test_dataloader = dgl.dataloading.NodeDataLoader(graph_entire, test_ids_entire, args.nb_sampler,
-                                                    batch_size=args.batch_size, shuffle=args.batch_shuffle,
-                                                    drop_last=False)
 
         for epoch in range(epochs):
             life_model_ins.observe_class_IL_batch(args, subgraphs, dataloader, featuress, labelss, task, train_idss, ids_per_clss, dataset)
-
-        print("test last task")
-        model.eval()
-        with torch.no_grad():
-            output = torch.tensor([]).cuda(args.gpu)
-            output_l = torch.tensor([]).cuda(args.gpu)
-            for input_nodes, output_nodes, blocks in test_dataloader:
-                blocks = [b.to(device='cuda:{}'.format(args.gpu)) for b in blocks]
-                input_features = blocks[0].srcdata['feat']
-                output_labels = blocks[-1].dstdata['label'].squeeze()
-                output_predictions, _ = model.forward_batch(blocks, input_features)
-                output = torch.cat((output,output_predictions),dim=0)
-                output_l = torch.cat((output_l, output_labels), dim=0)
-            _, indices = torch.max(output, dim=1)
-            correct = torch.sum(indices == output_l)
-            acc =  correct.item() * 1.0 / output_l.shape[0]
-        print(f"acc for all:{acc}")
 
         if not valid:
             model = pickle.load(open(save_model_path,'rb')).cuda(args.gpu)
         acc_mean = []
         label_offset1, label_offset2 = task_manager.get_label_offset(task)
         for t in range(task + 1):
-            subgraph, ids_per_cls, [train_ids, valid_ids_, test_ids_] = pickle.load(open(
-                f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
+            subgraph, ids_per_cls, [train_ids, valid_ids_, test_ids_] = pickle.load(open(f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{args.task_seq[t]}.pkl', 'rb'))
             subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
             test_ids = valid_ids_ if valid else test_ids_
             ids_per_cls_test = [list(set(ids).intersection(set(test_ids))) for ids in ids_per_cls]
