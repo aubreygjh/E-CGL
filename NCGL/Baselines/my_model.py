@@ -46,6 +46,7 @@ class NET(torch.nn.Module):
             self.sampler = Random_sampler(plus=False)
         elif args.my_args['random_sample'] == 'False':
             self.sampler = AttriRank_sampler(plus=False, diversity_ratio=args.my_args['diversity_ratio'])
+            # self.sampler = Loss_sampler(plus=False, diversity_ratio=args.my_args['diversity_ratio'])
         elif args.my_args['random_sample'] == 'CM':
             self.sampler = CM_sampler(plus=False)
         elif args.my_args['random_sample'] == 'MF':
@@ -158,6 +159,10 @@ class NET(torch.nn.Module):
         else:
             loss_w_ = [1. for i in range(args.n_cls)]
         loss_w_ = torch.tensor(loss_w_).to(device='cuda:{}'.format(args.gpu))
+
+        # # Calculate losses for each node in the training set
+        losses = self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2], reduce=False)
+     
         loss = self.ce(output[train_ids, offset1:offset2], output_labels-offset1, weight=loss_w_[offset1: offset2])
 
         # ###C: calculate auxiliary loss based on replay if not the first task

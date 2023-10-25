@@ -3,17 +3,17 @@ gpu=$2
 
 
 # main exp
-# CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Arxiv-CL \
-#        --method my \
-#        --backbone MLP \
-#        --gpu 0 \
-#        --ILmode taskIL \
-#        --inter-task-edges False \
-#        --minibatch False \
-#        --n_cls_per_task 4 \
-#        --repeats 5 \
-#        --overwrite_result False \
-#        --my_args " 'diversity_ratio': [0.25]; 'sample_budget': [3000]; 'random_sample': False" 
+CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Arxiv-CL \
+       --method my \
+       --backbone MLP \
+       --gpu 0 \
+       --ILmode taskIL \
+       --inter-task-edges False \
+       --minibatch False \
+       --n_cls_per_task 4 \
+       --repeats 5 \
+       --overwrite_result True \
+       --my_args " 'diversity_ratio': [0.25]; 'sample_budget': [3000]; 'random_sample': False" 
 
 # ablation:-mlp,+gcn
 # CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset Arxiv-CL \

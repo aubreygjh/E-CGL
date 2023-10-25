@@ -101,30 +101,6 @@ class AttriRank_sampler(nn.Module):
         scores_diversity = torch.norm(g.ndata['feat']-g.ndata['neighbor_feat'], dim=1).tolist()
         sorted_diversity = sorted(range(len(scores_diversity)),key=lambda x:scores_diversity[x], reverse=True)
 
-        # ### CM
-        # vecs = feats.half()
-        # budget_dist_compute = 1000
-        # d = 0.5
-        # sorted_diversity_idx = []
-        # for i,ids in enumerate(ids_per_cls_train):
-        #     other_cls_ids = list(range(len(ids_per_cls_train)))
-        #     other_cls_ids.pop(i)
-        #     ids_selected0 = ids_per_cls_train[i] if len(ids_per_cls_train[i])<budget_dist_compute else random.choices(ids_per_cls_train[i], k=budget_dist_compute)
-        #     dist = []
-        #     vecs_0 = vecs[ids_selected0]
-        #     for j in other_cls_ids:
-        #         chosen_ids = random.choices(ids_per_cls_train[j], k=min(budget_dist_compute,len(ids_per_cls_train[j])))
-        #         vecs_1 = vecs[chosen_ids]
-        #         if len(chosen_ids) < 26 or len(ids_selected0) < 26:
-        #             # torch.cdist throws error for tensor smaller than 26
-        #             dist.append(torch.cdist(vecs_0.float(), vecs_1.float()).half())
-        #         else:
-        #             dist.append(torch.cdist(vecs_0,vecs_1))
-        #     dist_ = torch.cat(dist,dim=-1) # include distance to all the other classes
-        #     n_selected = (dist_<d).sum(dim=-1)
-        #     rank = n_selected.sort()[1].tolist()
-        #     current_ids_selected = rank[:budget]
-        #     sorted_diversity_idx.extend([ids_per_cls_train[i][j] for j in current_ids_selected])
 
         train_ids_set = set(train_ids)
         sorted_attrirank_idx = [idx for idx in sorted_attrirank if idx in train_ids_set]
@@ -214,6 +190,42 @@ class CM_sampler(nn.Module):
             ids_selected.extend([ids_per_cls_train[i][j] for j in current_ids_selected])
         return ids_selected
 
+class Loss_sampler(nn.Module):
+    # sampler for ERGNN CM and CM*
+    def __init__(self, plus, diversity_ratio):
+        super().__init__()
+        self.plus = plus
+        self.diversity_ratio = diversity_ratio
+        # self.weight = nn.Parameter(torch.randn(num_nodes, hidden_dim))
+        # self.bias = nn.Parameter(torch.zeros(hidden_dim))
+
+    def forward(self, subgraph, ids_per_cls_train, train_ids, budget, feats, losses):
+        return self.sampling(subgraph, feats, ids_per_cls_train, train_ids, budget, losses)
+
+    def sampling(self, subgraph, feats, ids_per_cls_train, train_ids, budget, losses):
+   
+
+        # ### importance sampling
+        g = subgraph.local_var()
+        src, dst = g.edges()
+        edges = torch.cat([src.unsqueeze(1),dst.unsqueeze(1)],dim=1)# edges = np.array(g.edges().cpu()).T
+        AR = AttriRank(edges.detach().cpu(), feats.detach().cpu(), itermax=1000, weighted=False, nodeCount=feats.shape[0])
+        scores_attrirank = AR.runModel(dampFac=0.85)
+        # sorted_attrirank = sorted(range(len(scores_attrirank)),key=lambda x:scores_attrirank[x], reverse=True)
+        
+        scores_attrirank = torch.tensor(scores_attrirank)[train_ids]
+        # Calculate the importance scores using the learned transformation
+        print(losses[:10],scores_attrirank[:10])
+        importance_scores = torch.relu(losses * scores_attrirank).tolist()
+        sorted_scores = sorted(range(len(importance_scores)),key=lambda x:importance_scores[x],reverse=True)
+
+        train_ids_set = set(train_ids)
+
+        sorted_scores_idx = [idx for idx in sorted_scores if idx in train_ids_set]
+        ret = sorted_scores_idx[:min(budget, len(train_ids))]
+       
+        return ret
+    
 
 def drop_feature(x, drop_prob):
     drop_mask = torch.empty(
