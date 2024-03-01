@@ -2,7 +2,7 @@ from torch import nn
 from dgl.utils import expand_as_pair
 import dgl.function as fn
 
-gcn_msg = fn.copy_src(src='h', out='m')
+gcn_msg = fn.copy_u(u='h', out='m')
 gcn_reduce = fn.sum(msg='m', out='h')
 class MLP_GCNLayer(nn.Module):
     def __init__(self, in_feats, out_feats, negative_slope=0.2):

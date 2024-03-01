@@ -155,7 +155,7 @@ def signed_constant(module):
     std = gain / math.sqrt(fan)
     module.weight.data = module.weight.data.sign() * std
 
-gcn_msg = fn.copy_src(src='h', out='m')
+gcn_msg = fn.copy_u(u='h', out='m')
 gcn_reduce = fn.sum(msg='m', out='h')
 class GCNLayer(nn.Module):
     def __init__(self, in_feats, out_feats, negative_slope=0.2):
