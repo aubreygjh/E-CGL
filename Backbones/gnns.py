@@ -1,4 +1,4 @@
-from .gnnconv import GATConv, GCNLayer, GINConv
+from .gnnconv import GATConv, GCNLayer, GINConv, SGC_Agg
 from .layers import PairNorm
 from .utils import *
 linear_choices = {'nn.Linear':nn.Linear, 'Linear_IL':Linear_IL}
@@ -177,4 +177,85 @@ class GAT(nn.Module):
 
     def reset_params(self):
         for layer in self.gat_layers:
+            layer.reset_parameters()
+
+class SGC(nn.Module):
+    def __init__(self, args):
+        super(SGC, self).__init__()
+        linear_layer = linear_choices[args.SGC_args['linear']]
+        if args.method == 'twp':
+            self.twp=True
+        else:
+            self.twp=False
+        self.bn = args.SGC_args['batch_norm']
+        self.dropout = args.SGC_args['dropout']
+        self.leaky_relu = nn.LeakyReLU(0.2)
+        self.gpu = args.gpu
+        self.neighbor_agg = SGC_Agg(k=args.SGC_args['k'])
+        self.feat_trans_layers = nn.ModuleList()
+        if self.bn:
+            self.bns = nn.ModuleList()
+        h_dims = args.SGC_args['h_dims']
+        if len(h_dims) > 0:
+            self.feat_trans_layers.append(linear_layer(args.d_data, h_dims[0], bias=args.SGC_args['linear_bias']))
+            if self.bn:
+                self.bns.append(nn.BatchNorm1d(h_dims[0]))
+            for i in range(len(h_dims) - 1):
+                self.feat_trans_layers.append(linear_layer(h_dims[i], h_dims[i + 1], bias=args.SGC_args['linear_bias']))
+                if self.bn:
+                    self.bns.append(nn.BatchNorm1d(h_dims[i + 1]))
+            self.feat_trans_layers.append(linear_layer(h_dims[-1], args.n_cls, bias=args.SGC_args['linear_bias']))
+        elif len(h_dims) == 0:
+            self.feat_trans_layers.append(linear_layer(args.d_data, args.n_cls, bias=args.SGC_args['linear_bias']))
+        else:
+            raise ValueError('no valid MLP dims are given')
+
+    def forward(self, graph, x, twp=False, tasks=None):
+        graph = graph.local_var().to('cuda:{}'.format(self.gpu))
+        e_list = []
+        x = self.neighbor_agg(graph, x)
+        logits, e = self.feat_trans(graph, x, twp=twp, cls=tasks)
+        e_list = e_list + e
+        return logits, e_list
+
+    def forward_batch(self, blocks, x, twp=False, tasks=None):
+        #graph = graph.local_var().to('cuda:{}'.format(self.gpu))
+        e_list = []
+        x = self.neighbor_agg.forward_batch(blocks, x)
+        logits, e = self.feat_trans(blocks[0], x, twp=twp, cls=tasks)
+        e_list = e_list + e
+        return logits, e_list
+
+    def feat_trans(self, graph, x, twp=False, cls=None):
+        for i, layer in enumerate(self.feat_trans_layers[:-1]):
+            x = layer(x)
+            if self.bn:
+                x = self.bns[i](x)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.feat_trans_layers[-1](x)
+
+        self.second_last_h = x
+
+        mask = torch.zeros(x.shape[-1], device=x.get_device())
+        if cls is not None:
+            mask[cls] = 1.
+        else:
+            mask[:] = 1.
+        x = x * mask
+        # for twp
+        elist = []
+        if self.twp:
+            graph.srcdata['h'] = x
+            graph.apply_edges(
+                lambda edges: {'e': torch.sum((torch.mul(edges.src['h'], torch.tanh(edges.dst['h']))), 1)})
+            e = self.leaky_relu(graph.edata.pop('e'))
+            e_soft = edge_softmax(graph, e)
+
+            elist.append(e_soft)
+
+        return x, elist
+        #return x.log_softmax(dim=-1), elist
+    def reset_params(self):
+        for layer in self.feat_trans_layers:
             layer.reset_parameters()

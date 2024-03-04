@@ -345,3 +345,175 @@ class GATConv(nn.Module):
             resval = self.res_fc(h_dst).view(h_dst.shape[0], -1, self._out_feats)
             rst = rst + resval
         return rst, elist
+
+
+class SGC_Agg(nn.Module):
+    # only the neighborhood aggregation of SGC
+    def __init__(self, k=1, cached=False, norm=None, allow_zero_in_degree=False):
+        super().__init__()
+        self._cached = cached
+        self._cached_h = None
+        self._k = k
+        self.norm = norm
+        self._allow_zero_in_degree = allow_zero_in_degree
+
+    def set_allow_zero_in_degree(self, set_value):
+        r"""
+
+        Description
+        -----------
+        Set allow_zero_in_degree flag.
+
+        Parameters
+        ----------
+        set_value : bool
+            The value to be set to the flag.
+        """
+        self._allow_zero_in_degree = set_value
+
+    def forward(self, graph, feat):
+        r"""
+
+        Description
+        -----------
+        Compute Simplifying Graph Convolution layer.
+
+        Parameters
+        ----------
+        graph : DGLGraph
+            The graph.
+        feat : torch.Tensor
+            The input feature of shape :math:`(N, D_{in})` where :math:`D_{in}`
+            is size of input feature, :math:`N` is the number of nodes.
+
+        Returns
+        -------
+        torch.Tensor
+            The output feature of shape :math:`(N, D_{out})` where :math:`D_{out}`
+            is size of output feature.
+
+        Raises
+        ------
+        DGLError
+            If there are 0-in-degree nodes in the input graph, it will raise DGLError
+            since no message will be passed to those nodes. This will cause invalid output.
+            The error can be ignored by setting ``allow_zero_in_degree`` parameter to ``True``.
+
+        Note
+        ----
+        If ``cache`` is set to True, ``feat`` and ``graph`` should not change during
+        training, or you will get wrong results.
+        """
+        with graph.local_scope():
+            if not self._allow_zero_in_degree:
+                if (graph.in_degrees() == 0).any():
+                    raise DGLError('There are 0-in-degree nodes in the graph, '
+                                   'output for those nodes will be invalid. '
+                                   'This is harmful for some applications, '
+                                   'causing silent performance regression. '
+                                   'Adding self-loop on the input graph by '
+                                   'calling `g = dgl.add_self_loop(g)` will resolve '
+                                   'the issue. Setting ``allow_zero_in_degree`` '
+                                   'to be `True` when constructing this module will '
+                                   'suppress the check and let the code run.')
+
+            if self._cached_h is not None:
+                feat = self._cached_h
+            else:
+                # compute normalization
+                degs = graph.in_degrees().float().clamp(min=1)
+                norm = th.pow(degs, -0.5)
+                norm = norm.to(feat.device).unsqueeze(1)
+                # compute (D^-1 A^k D)^k X
+                for _ in range(self._k):
+                    feat = feat * norm
+                    graph.ndata['h'] = feat
+                    graph.update_all(fn.copy_u('h', 'm'), fn.sum('m', 'h'))
+                    feat = graph.ndata.pop('h')
+                    feat = feat * norm
+
+                if self.norm is not None:
+                    feat = self.norm(feat)
+
+                # cache feature
+                if self._cached:
+                    self._cached_h = feat
+            # return self.fc(feat)
+            return feat
+
+    def forward_batch(self, blocks, feat):
+        r"""
+
+        Description
+        -----------
+        Compute Simplifying Graph Convolution layer.
+
+        Parameters
+        ----------
+        graph : DGLGraph
+            The graph.
+        feat : torch.Tensor
+            The input feature of shape :math:`(N, D_{in})` where :math:`D_{in}`
+            is size of input feature, :math:`N` is the number of nodes.
+
+        Returns
+        -------
+        torch.Tensor
+            The output feature of shape :math:`(N, D_{out})` where :math:`D_{out}`
+            is size of output feature.
+
+        Raises
+        ------
+        DGLError
+            If there are 0-in-degree nodes in the input graph, it will raise DGLError
+            since no message will be passed to those nodes. This will cause invalid output.
+            The error can be ignored by setting ``allow_zero_in_degree`` parameter to ``True``.
+
+        Note
+        ----
+        If ``cache`` is set to True, ``feat`` and ``graph`` should not change during
+        training, or you will get wrong results.
+        """
+        if self._k != len(blocks):
+            raise DGLError('The depth of the dataloader sampler is incompatible with the depth of SGC')
+        for block in blocks:
+            with block.local_scope():
+                if not self._allow_zero_in_degree:
+                    if (block.in_degrees() == 0).any():
+                        raise DGLError('There are 0-in-degree nodes in the graph, '
+                                       'output for those nodes will be invalid. '
+                                       'This is harmful for some applications, '
+                                       'causing silent performance regression. '
+                                       'Adding self-loop on the input graph by '
+                                       'calling `g = dgl.add_self_loop(g)` will resolve '
+                                       'the issue. Setting ``allow_zero_in_degree`` '
+                                       'to be `True` when constructing this module will '
+                                       'suppress the check and let the code run.')
+
+                if self._cached_h is not None:
+                    feat = self._cached_h
+                else:
+                    # compute normalization
+                    degs = block.out_degrees().float().clamp(min=1)
+                    norm = th.pow(degs, -0.5)
+                    norm = norm.to(feat.device).unsqueeze(1)
+                    # compute (D^-1 A^k D)^k X
+                    feat = feat * norm
+                    block.srcdata['h'] = feat
+                    block.update_all(fn.copy_u('h', 'm'), fn.sum('m', 'h'))
+                    feat = block.dstdata.pop('h')
+                    degs = block.in_degrees().float().clamp(min=1)
+                    norm = th.pow(degs, -0.5)
+                    norm = norm.to(feat.device).unsqueeze(1)
+                    feat = feat * norm
+
+        with blocks[-1].local_scope():
+            if self.norm is not None:
+                feat = self.norm(feat)
+
+            # cache feature
+            if self._cached:
+                self._cached_h = feat
+
+        # return self.fc(feat)
+        return feat
