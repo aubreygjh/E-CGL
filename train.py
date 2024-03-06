@@ -12,7 +12,7 @@ sys.path.append(os.path.join(dir_home,'.local/lib/python3.7/site-packages')) # f
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='CGLB')
     parser.add_argument("--dataset", type=str, 
-                        choices=['Products-CL', 'Reddit-CL', 'Arxiv-CL', 'CoraFull-CL'], default='Products-CL', 
+                        choices=['Products-CL', 'products', 'Reddit-CL', 'reddit', 'Arxiv-CL', 'arxiv', 'CoraFull-CL', 'cora'], default='Products-CL', 
                         help='Products-CL, Reddit-CL, Arxiv-CL, CoraFull-CL')
     parser.add_argument("--gpu", type=int, default=0, help="which GPU to use.")
     parser.add_argument("--seed", type=int, default=1, help="seed for exp")
@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
     parser.add_argument('--weight-decay', type=float, default=5e-4, help="weight decay")
     parser.add_argument('--backbone', type=str, 
-                        choices=['GCN', 'GAT', 'GIN', 'SGC', 'MLP'], default='GCN', 
+                        choices=['gcn', 'gat', 'gin', 'sgc', 'mlp'], default='gcn', 
                         help="backbone GNN, [GCN, GAT, GIN, SGC, MLP]")
     parser.add_argument('--method', type=str,
                         choices=["bare", 'lwf', 'gem', 'ewc', 'mas', 'twp', 'ergnn', 'ssm', 'cat', 'my', 'jointtrain', 'joint','Joint'], default="my",
@@ -57,8 +57,8 @@ if __name__ == '__main__':
     parser.add_argument('--twp_args', type=str2dict, default={'lambda_l': 10000., 'lambda_t': 10000., 'beta': 0.01})
     parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [5000], 'd': [0.5], 'sampler': ['MF']}, help='sampler options: CM, CM_plus, MF, MF_plus')
     parser.add_argument('--ssm_args', type=str2dict, default={'sampler': 'random', 'c_node_budget': 100, 'nei_budget':[0,0], 'lambda':1})
-    parser.add_argument('--cat_args', type=str2dict, default={})
-    parser.add_argument('--my_args', type=str2dict, default={'diversity_ratio':[0.25], 'sample_budget': [5000], 'random_sample':False}) #, 'lambda_replay':[1.0]
+    parser.add_argument('--cat_args', type=str2dict, default={'budget': [100]})
+    parser.add_argument('--my_args', type=str2dict, default={'diversity_ratio':[0.1,0.25], 'sample_budget': [1000,3000,5000], 'random_sample':'False'}) #, 'lambda_replay':[1.0]
     parser.add_argument('--joint_args', type=str2dict, default={'Na': None})
     parser.add_argument('--cls-balance', type=strtobool, default=True, help='whether to balance the cls when training and testing')
     parser.add_argument('--repeats', type=int, default=1, help='how many times to repeat the experiments for the mean and std')
@@ -78,12 +78,16 @@ if __name__ == '__main__':
     parser.add_argument('--perform_testing', type=strtobool, default=False, help='')
     args = parser.parse_args()
     args.ratio_valid_test = [float(i) for i in args.ratio_valid_test]
-    # set_seed(args)
 
+    dsname_mapping = {'cora': 'CoraFull-CL', 'CoraFull-CL': 'CoraFull-CL',
+                      'arxiv': 'Arxiv-CL', 'Arxiv-CL': 'Arxiv-CL',
+                      'reddit': 'Reddit-CL', 'Reddit-CL': 'Reddit-CL',
+                      'products': 'Products-CL', 'Products-CL': 'Products-CL'}
+    args.dataset = dsname_mapping[args.dataset]
     method_args = {'bare': args.bare_args,  'lwf': args.lwf_args, 'ewc': args.ewc_args, 'mas': args.mas_args,
-                   'gem': args.gem_args, 'twp': args.twp_args,  'ergnn': args.ergnn_args, 'ssm': args.ssm_args,
-                   'cat': args.cat_args,'my': args.my_args, 'joint': args.joint_args}
-    backbone_args = {'GCN': args.GCN_args, 'GAT': args.GAT_args, 'GIN': args.GIN_args, 'SGC': args.SGC_args, 'MLP': args.GCN_args}
+                   'gem': args.gem_args, 'twp': args.twp_args, 'ergnn': args.ergnn_args, 'ssm': args.ssm_args,
+                   'cat': args.cat_args, 'my': args.my_args, 'joint': args.joint_args}
+    backbone_args = {'gcn': args.GCN_args, 'gat': args.GAT_args, 'gin': args.GIN_args, 'sgc': args.SGC_args, 'mlp': args.GCN_args}
     hyp_param_list = compose_hyper_params(method_args[args.method])
     AP_best, name_best = 0, None
     AP_dict = {str(hyp_params).replace("'",'').replace(' ','').replace(',','_').replace(':','_'):[] for hyp_params in hyp_param_list}

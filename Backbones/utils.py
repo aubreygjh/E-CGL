@@ -106,12 +106,11 @@ class incremental_graph_trans_(nn.Module):
         #self.graph = dgl.add_self_loop(self.graph)
         self.graph.ndata['label'] = self.labels
         self.d_data = self.graph.ndata['feat'].shape[1]
-        self.n_cls = n_cls
-        self.d_data = self.graph.ndata['feat'].shape[1]
         self.n_nodes = self.labels.shape[0]
+        self.n_cls = n_cls
         self.tr_va_te_split = dataset[1]
 
-    def get_graph(self, tasks_to_retain=[], node_ids = None, remove_edges=True):
+    def get_graph(self, tasks_to_retain=[], node_ids=None, remove_edges=True):
         # get the partial graph
         # tasks-to-retain: classes retained in the partial graph
         # tasks-to-infer: classes to predict on the partial graph

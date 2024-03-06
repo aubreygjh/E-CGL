@@ -8,20 +8,18 @@ import copy
 import errno
 
 def assign_hyp_param(args, params):
-    if args.method=='lwf':
-        args.lwf_args = params
     if args.method == 'bare':
         args.bare_args = params
-    if args.method == 'gem':
-        args.gem_args = params
+    if args.method == 'lwf':
+        args.lwf_args = params
     if args.method == 'ewc':
         args.ewc_args = params
     if args.method == 'mas':
         args.mas_args = params
+    if args.method == 'gem':
+        args.gem_args = params
     if args.method == 'twp':
         args.twp_args = params
-    if args.method in ['jointtrain', 'joint', 'Joint']:
-        args.joint_args = params
     if args.method == 'ergnn':
         args.ergnn_args = params
     if args.method == 'ssm':
@@ -30,7 +28,8 @@ def assign_hyp_param(args, params):
         args.cat_args = params
     if args.method == 'my':
         args.my_args = params
-
+    if args.method in ['jointtrain', 'joint', 'Joint']:
+        args.joint_args = params
 
 def str2dict(s):
     # accepts a str like " 'k1':v1; ...; 'km':vm ", values (v1,...,vm) can be single values or lists (for hyperparameter tuning)

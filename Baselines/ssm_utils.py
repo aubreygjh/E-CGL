@@ -13,7 +13,7 @@ import dgl.function as fn
 import copy
 
 class random_subgraph_sampler(nn.Module):
-    def __init__(self,args):
+    def __init__(self, args):
         super().__init__()
 
     def forward(self, graph, center_node_budget, nei_budget, gnn, ids_per_cls):

@@ -12,15 +12,6 @@ import importlib
 import copy
 import dgl
 
-def drop_feature(x, drop_prob):
-    drop_mask = torch.empty(
-        (x.size(1), ),
-        dtype=torch.float32,
-        device=x.device).uniform_(0, 1) < drop_prob
-    x = x.clone()
-    x[:, drop_mask] = 0
-
-    return x
 
 joint_alias = ['joint', 'Joint', 'joint_replay_all', 'jointtrain']
 def get_pipeline(args):
@@ -34,9 +25,9 @@ def get_pipeline(args):
                     return pipeline_class_IL_inter_edge_minibatch
             else:
                 if args.method in joint_alias:
-                    return pipeline_class_IL_no_inter_edge_minibatch_joint
+                    return pipeline_class_IL_no_inter_edge_minibatch_joint####
                 else:
-                    return pipeline_class_IL_no_inter_edge_minibatch
+                    return pipeline_class_IL_no_inter_edge_minibatch####
         elif args.ILmode == 'taskIL':
             if args.inter_task_edges:
                 if args.method in joint_alias:
@@ -57,9 +48,9 @@ def get_pipeline(args):
                     return pipeline_class_IL_inter_edge
             else:
                 if args.method in joint_alias:
-                    return pipeline_class_IL_no_inter_edge_joint
+                    return pipeline_class_IL_no_inter_edge_joint####
                 else:
-                    return pipeline_class_IL_no_inter_edge
+                    return pipeline_class_IL_no_inter_edge####
         elif args.ILmode == 'taskIL':
             if args.inter_task_edges:
                 if args.method in joint_alias:
@@ -115,15 +106,20 @@ def data_prepare(args):
                 with open(f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{task_cls}.pkl', 'wb') as f:
                     pickle.dump([subgraph, ids_per_cls, [train_ids, valid_ids, test_ids]], f)
 
+
 def pipeline_task_IL_no_inter_edge(args, valid=False):
     # valid=True denotes the evaluation is done on validation set, otherwise on testing set
     epochs = args.epochs if valid else 0 # training epochs is zero for testing mode
     torch.cuda.set_device(args.gpu)
+
+    # Load Dataset
     dataset = NodeLevelDataset(args.dataset,ratio_valid_test=args.ratio_valid_test,args=args)
     args.d_data, args.n_cls = dataset.d_data, dataset.n_cls
     cls = [list(range(i, i + args.n_cls_per_task)) for i in range(0, args.n_cls-1, args.n_cls_per_task)] # this line will remove the final task if only one class included
     args.task_seq = cls
     args.n_tasks = len(args.task_seq)
+
+    # Load Model
     task_manager = semi_task_manager()
     model = get_model(dataset, args).cuda(args.gpu) if valid else None
     life_model = importlib.import_module(f'Baselines.{args.method}_model')
@@ -131,13 +127,17 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
     # model_params = sum(p.numel() for p in model.parameters())
     # life_model_params = sum(p.numel() for p in life_model_ins.parameters())
     # print(f"Model Params: {model_params}, {life_model_params}.")
+
+    # Prepare Dataset for Continual Format
+    data_prepare(args)
     acc_matrix = np.zeros([args.n_tasks, args.n_tasks])
     meanas = []
     prev_model = None
-    data_prepare(args)
     n_cls_so_far = 0
     train_time = []
     infer_time = []
+
+    # Iterate Over Task Sequences
     for task, task_cls in enumerate(args.task_seq):
         name, ite = args.current_model_save_path
         config_name = name.split('/')[-1]
@@ -147,13 +147,11 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
         n_cls_so_far += len(task_cls)
         subgraph, ids_per_cls, [train_ids, valid_ids, test_ids] = pickle.load(open(
                 f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{task_cls}.pkl', 'rb'))
-
         subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
         features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-        aug_features = drop_feature(features, 0.3).to(device='cuda:{}'.format(args.gpu))
         task_manager.add_task(task, n_cls_so_far)
 
-        # train
+        # Train
         for epoch in range(epochs):
             start_time = round(time.time()*1000,3)
             if args.method == 'lwf':
@@ -163,7 +161,7 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
             end_time = round(time.time()*1000,3)
             train_time.append(end_time-start_time)
 
-        # test
+        # Test
         if not valid:
             model = pickle.load(open(save_model_path,'rb')).cuda(args.gpu)
         acc_mean = []
@@ -200,8 +198,6 @@ def pipeline_task_IL_no_inter_edge(args, valid=False):
                 pickle.dump(model, f)  # save the best model for each hyperparameter composition
         prev_model = copy.deepcopy(life_model_ins).cuda(args.gpu)
 
-    # print(f'Train Time: {round(np.sum(train_time), 2)}')
-    # print(f'Train Time: {round(np.mean(train_time), 2)}ms')
     print('AP: ', acc_mean)
     backward = []
     for t in range(args.n_tasks - 1):
