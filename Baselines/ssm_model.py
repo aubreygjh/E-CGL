@@ -58,7 +58,7 @@ class NET(torch.nn.Module):
             g = dgl.batch([g, aux_g])
             #g = dgl.batch([g, aux_g.to(device='cuda:{}'.format(args.gpu))])
 
-        dataloader = dgl.dataloading.NodeDataLoader(g, train_ids, args.nb_sampler,
+        dataloader = dgl.dataloading.DataLoader(g, train_ids, args.nb_sampler,
                                                     batch_size=args.batch_size, shuffle=args.batch_shuffle,
                                                     drop_last=False)
 

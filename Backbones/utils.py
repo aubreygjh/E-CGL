@@ -62,7 +62,7 @@ def mean_AP(args,logits, labels, cls_balance=True, ids_per_cls=None):
 def evaluate_batch(args,model, g, features, labels, mask, label_offset1, label_offset2, cls_balance=True, ids_per_cls=None):
     model.eval()
     with torch.no_grad():
-        dataloader = dgl.dataloading.NodeDataLoader(g.cpu(), list(range(labels.shape[0])), args.nb_sampler, batch_size=args.batch_size, shuffle=False, drop_last=False)
+        dataloader = dgl.dataloading.DataLoader(g.cpu(), list(range(labels.shape[0])), args.nb_sampler, batch_size=args.batch_size, shuffle=False, drop_last=False)
         output = torch.tensor([]).cuda(args.gpu)
         output_l = torch.tensor([]).cuda(args.gpu)
         for input_nodes, output_nodes, blocks in dataloader:

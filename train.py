@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--gem_args', type=str2dict, default={'memory_strength': 0.5, 'n_memories': 100})
     parser.add_argument('--twp_args', type=str2dict, default={'lambda_l': 10000., 'lambda_t': 10000., 'beta': 0.01})
     parser.add_argument('--ergnn_args', type=str2dict, default={'budget': [5000], 'd': [0.5], 'sampler': ['MF']}, help='sampler options: CM, CM_plus, MF, MF_plus')
-    parser.add_argument('--ssm_args', type=str2dict, default={'sampler': 'random', 'c_node_budget': 100, 'nei_budget':[0,0], 'lambda':1})
+    parser.add_argument('--ssm_args', type=str2dict, default={'sampler': 'random', 'c_node_budget': 100, 'nei_budget':[[0,0]], 'lambda':1})
     parser.add_argument('--cat_args', type=str2dict, default={'budget': [100]})
     parser.add_argument('--my_args', type=str2dict, default={'diversity_ratio':[0.1,0.25], 'sample_budget': [1000,3000,5000], 'random_sample':'False'}) #, 'lambda_replay':[1.0]
     parser.add_argument('--joint_args', type=str2dict, default={'Na': None})

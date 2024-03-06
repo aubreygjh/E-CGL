@@ -32,7 +32,7 @@ class random_subgraph_sampler(nn.Module):
     def nei_sampler(self, center_nodes_selected, graph, nei_budget):
         nodes_selected_current_hop = copy.deepcopy(center_nodes_selected)
         retained_nodes = copy.deepcopy(center_nodes_selected)
-        for b in range(nei_budget):
+        for b in nei_budget:
             # from 1-hop to len(nei_budget)-hop neighbors
             neighbors = graph.in_edges(nodes_selected_current_hop)[0].tolist()
             nodes_selected_current_hop = random.choices(neighbors, k=b)
