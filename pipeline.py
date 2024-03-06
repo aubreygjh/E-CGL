@@ -13,73 +13,18 @@ import copy
 import dgl
 
 
-""" 
-def get_pipeline(args):
-    # choose the pipeline for the chosen setting
-    if args.minibatch:
-        if args.ILmode == 'classIL':
-            if args.inter_task_edges:
-                if args.method in joint_alias:
-                    return pipeline_class_IL_inter_edge_minibatch_joint
-                else:
-                    return pipeline_class_IL_inter_edge_minibatch
-            else:
-                if args.method in joint_alias:
-                    return pipeline_class_IL_no_inter_edge_minibatch_joint####
-                else:
-                    return pipeline_class_IL_no_inter_edge_minibatch####
-        elif args.ILmode == 'taskIL':
-            if args.inter_task_edges:
-                if args.method in joint_alias:
-                    return pipeline_task_IL_inter_edge_minibatch_joint
-                else:
-                    return pipeline_task_IL_inter_edge_minibatch
-            else:
-                if args.method in joint_alias:
-                    return pipeline_task_IL_no_inter_edge_minibatch_joint####
-                else:
-                    return pipeline_task_IL_no_inter_edge_minibatch####
-    else:
-        if args.ILmode == 'classIL':
-            if args.inter_task_edges:
-                if args.method in joint_alias:
-                    return pipeline_class_IL_inter_edge_joint
-                else:
-                    return pipeline_class_IL_inter_edge
-            else:
-                if args.method in joint_alias:
-                    return pipeline_class_IL_no_inter_edge_joint####
-                else:
-                    return pipeline_class_IL_no_inter_edge####
-        elif args.ILmode == 'taskIL':
-            if args.inter_task_edges:
-                if args.method in joint_alias:
-                    return pipeline_task_IL_inter_edge_joint
-                else:
-                    return pipeline_task_IL_inter_edge
-            else:
-                if args.method in joint_alias:
-                    return pipeline_task_IL_no_inter_edge_joint####
-                else:
-                    return pipeline_task_IL_no_inter_edge####
- """
-
-
 ### Simplied get_pipeline
-
 def get_pipeline(args): 
-    # choose the pipeline for the chosen setting
-    # joint_alias = ['joint', 'Joint', 'joint_replay_all', 'jointtrain']
     if args.minibatch:
         if args.ILmode == 'classIL':
-            return pipeline_classIL_minibatch####
+            return pipeline_classIL_minibatch
         elif args.ILmode == 'taskIL':
-            return pipeline_taskIL_minibatch####
+            return pipeline_taskIL_minibatch
     elif not args.minibatch:
         if args.ILmode == 'classIL':
-            return pipeline_classIL####
+            return pipeline_classIL
         elif args.ILmode == 'taskIL':
-            return pipeline_taskIL####
+            return pipeline_taskIL
 
 
 def data_prepare(args):
@@ -183,7 +128,6 @@ def pipeline_taskIL(args, valid=False):
                     f'{args.data_path}/no_inter_tsk_edge/{args.dataset}_{task_cls}.pkl', 'rb'))
             subgraph = subgraph.to(device='cuda:{}'.format(args.gpu))
             features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-        
 
         # Train
         start_time = round(time.time()*1000,3)
@@ -229,8 +173,7 @@ def pipeline_taskIL(args, valid=False):
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(np.mean(train_time),2)}ms|", end="")
-        print(f"infer_time:{round(np.mean(infer_time),2)}ms", end="")
+        print(f"time:({round(np.mean(train_time),2)}/{round(np.mean(infer_time),2)})ms", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -365,8 +308,7 @@ def pipeline_taskIL_minibatch(args, valid=False):
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(np.mean(train_time),2)}ms|", end="")
-        print(f"infer_time:{round(np.mean(infer_time),2)}ms", end="")
+        print(f"time:({round(np.mean(train_time),2)}/{round(np.mean(infer_time),2)})ms", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -481,9 +423,8 @@ def pipeline_classIL(args, valid=False):
         meanas.append(meana)
 
         acc_mean = round(np.mean(acc_mean)*100,2)
-        print(f"acc_mean: {acc_mean}", end="")
-        print(f"train_time:{round(np.mean(train_time),2)}ms|", end="")
-        print(f"infer_time:{round(np.mean(infer_time),2)}ms", end="")
+        print(f"acc_mean: {acc_mean}|", end="")
+        print(f"time:({round(np.mean(train_time),2)}/{round(np.mean(infer_time),2)})ms", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')
@@ -596,7 +537,6 @@ def pipeline_classIL_minibatch(args, valid=False):
             test_ids = valid_ids_ if valid else test_ids_
             ids_per_cls_test = [list(set(ids).intersection(set(test_ids))) for ids in ids_per_cls]
             features, labels = subgraph.srcdata['feat'], subgraph.dstdata['label'].squeeze()
-            # labels = labels - label_offset1 #????
             acc = evaluate_batch(args,model, subgraph, features, labels, test_ids, label_offset1, label_offset2,
                                cls_balance=args.cls_balance, ids_per_cls=ids_per_cls_test)
             acc_matrix[task][t] = round(acc * 100, 2)
@@ -610,8 +550,7 @@ def pipeline_classIL_minibatch(args, valid=False):
 
         acc_mean = round(np.mean(acc_mean) * 100, 2)
         print(f"acc_mean: {acc_mean}|", end="")
-        print(f"train_time:{round(np.mean(train_time),2)}ms|", end="")
-        print(f"infer_time:{round(np.mean(infer_time),2)}ms", end="")
+        print(f"time:({round(np.mean(train_time),2)}/{round(np.mean(infer_time),2)})ms", end="")
         print()
         if valid:
             mkdir_if_missing(f'{args.result_path}/{subfolder_c}/val_models')

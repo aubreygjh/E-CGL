@@ -8,7 +8,7 @@ CUDA_VISIBLE_DEVICES=$gpu python train.py --dataset $dataset \
        --method $method \
        --backbone $backbone \
        --gpu 0 \
-       --ILmode classIL \
+       --ILmode taskIL \
        --inter-task-edges False \
        --minibatch False \
        --n_cls_per_task 2 \
