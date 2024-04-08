@@ -26,8 +26,8 @@ def assign_hyp_param(args, params):
         args.ssm_args = params
     if args.method == 'cat':
         args.cat_args = params
-    if args.method == 'my':
-        args.my_args = params
+    if args.method == 'ecgl':
+        args.ecgl_args = params
     if args.method in ['jointtrain', 'joint', 'Joint']:
         args.joint_args = params
 

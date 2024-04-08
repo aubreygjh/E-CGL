@@ -1,7 +1,7 @@
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
-from .my_utils import *
+from .ecgl_utils import *
 
 
 def MultiClassCrossEntropy(logits, labels, T):
@@ -42,16 +42,16 @@ class NET(torch.nn.Module):
 
         # setup memory replay
         self.epochs = 0
-        if args.my_args['random_sample'] == 'True':
+        if args.ecgl_args['random_sample'] == 'True':
             self.sampler = Random_sampler(plus=False)
-        elif args.my_args['random_sample'] == 'False':
-            self.sampler = AttriRank_sampler(plus=False, diversity_ratio=args.my_args['diversity_ratio'])
-            # self.sampler = Loss_sampler(plus=False, diversity_ratio=args.my_args['diversity_ratio'])
-        elif args.my_args['random_sample'] == 'CM':
+        elif args.ecgl_args['random_sample'] == 'False':
+            self.sampler = AttriRank_sampler(plus=False, diversity_ratio=args.ecgl_args['diversity_ratio'])
+            # self.sampler = Loss_sampler(plus=False, diversity_ratio=args.ecgl_args['diversity_ratio'])
+        elif args.ecgl_args['random_sample'] == 'CM':
             self.sampler = CM_sampler(plus=False)
-        elif args.my_args['random_sample'] == 'MF':
+        elif args.ecgl_args['random_sample'] == 'MF':
             self.sampler = MF_sampler(plus=False)
-        self.budget = int(args.my_args['sample_budget'])  
+        self.budget = int(args.ecgl_args['sample_budget'])  
         self.buffer_node_ids = []
         self.replay_g = None
         
@@ -61,12 +61,12 @@ class NET(torch.nn.Module):
         # self.mask_node = FeatMask(0.3, node_feat_names=[])
         # self.fc1 = nn.Linear(args.n_cls, 128, device='cuda:{}'.format(args.gpu))
         # self.fc2 = nn.Linear(128, args.n_cls, device='cuda:{}'.format(args.gpu))
-        # self.con_weight = args.my_args['con_weight']
+        # self.con_weight = args.ecgl_args['con_weight']
 
         # setup loss&optimizer
         self.ce = torch.nn.functional.cross_entropy
         self.opt = torch.optim.Adam(self.net.parameters(), lr=args.lr, weight_decay=args.weight_decay) #list(self.net.parameters())+list(self.fc1.parameters())+list(self.fc2.parameters())
-        # self.lambda_replay = args.my_args['lambda_replay']
+        # self.lambda_replay = args.ecgl_args['lambda_replay']
 
     def forward(self, g, features):
         output = self.net(g, features)
